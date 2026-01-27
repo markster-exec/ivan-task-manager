@@ -298,14 +298,80 @@ COMMAND_PATTERNS = [
     (r"\b(help|commands|\?)\b", handle_help),
 ]
 
+# Intent handlers for Azure OpenAI classification
+INTENT_HANDLERS = {
+    "next": handle_next,
+    "done": handle_done,
+    "skip": handle_skip,
+    "tasks": handle_tasks,
+    "morning": handle_morning,
+    "sync": handle_sync,
+    "help": handle_help,
+}
+
+
+async def classify_intent_with_ai(text: str) -> Optional[str]:
+    """Use Azure OpenAI to classify intent when regex fails.
+
+    Returns one of: next, done, skip, tasks, morning, sync, help, or None.
+    """
+    if not settings.azure_openai_api_key:
+        return None
+
+    try:
+        from openai import AzureOpenAI
+
+        client = AzureOpenAI(
+            api_key=settings.azure_openai_api_key,
+            api_version="2024-02-15-preview",
+            azure_endpoint=settings.azure_openai_endpoint,
+        )
+
+        prompt = f"""Classify the following message into one of these task management intents:
+- "next": User wants to get their next task to work on
+- "done": User has completed their current task
+- "skip": User wants to skip/defer the current task
+- "tasks": User wants to see all their tasks
+- "morning": User wants a morning briefing/summary
+- "sync": User wants to refresh/sync tasks from sources
+- "help": User wants help with available commands
+- "unknown": Message doesn't match any intent
+
+Message: "{text}"
+
+Respond with ONLY the intent name (next, done, skip, tasks, morning, sync, help, or unknown)."""
+
+        response = client.chat.completions.create(
+            model=settings.azure_openai_deployment,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=10,
+            temperature=0,
+        )
+
+        intent = response.choices[0].message.content.strip().lower()
+        if intent in INTENT_HANDLERS:
+            logger.info(f"AI classified '{text}' as intent: {intent}")
+            return intent
+        return None
+
+    except Exception as e:
+        logger.warning(f"AI intent classification failed: {e}")
+        return None
+
 
 async def route_message(text: str, user_id: str) -> Optional[str]:
     """Route message to appropriate handler."""
     text_lower = text.lower().strip()
 
+    # Try regex patterns first (fast path)
     for pattern, handler in COMMAND_PATTERNS:
         if re.search(pattern, text_lower):
             return await handler(user_id)
+
+    # Fall back to AI intent classification
+    intent = await classify_intent_with_ai(text)
+    if intent and intent in INTENT_HANDLERS:
+        return await INTENT_HANDLERS[intent](user_id)
 
     return None
 
