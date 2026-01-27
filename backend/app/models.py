@@ -1,7 +1,17 @@
 """SQLAlchemy models for Ivan Task Manager."""
 
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Boolean, Integer, DateTime, Date, JSON, Text
+from sqlalchemy import (
+    create_engine,
+    Column,
+    String,
+    Boolean,
+    Integer,
+    DateTime,
+    Date,
+    JSON,
+    Text,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import get_settings
@@ -77,7 +87,9 @@ class SyncState(Base):
 
     source = Column(String, primary_key=True)  # "clickup" | "github"
     last_sync = Column(DateTime, nullable=True)
-    status = Column(String, default="pending")  # "pending" | "running" | "success" | "error"
+    status = Column(
+        String, default="pending"
+    )  # "pending" | "running" | "success" | "error"
     error_message = Column(Text, nullable=True)
 
 
@@ -87,7 +99,9 @@ class NotificationLog(Base):
     __tablename__ = "notification_log"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    notification_type = Column(String, nullable=False)  # "instant" | "digest" | "morning"
+    notification_type = Column(
+        String, nullable=False
+    )  # "instant" | "digest" | "morning"
     task_id = Column(String, nullable=True)
     message_hash = Column(String, nullable=False)  # To dedupe
     sent_at = Column(DateTime, default=datetime.utcnow)

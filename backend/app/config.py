@@ -12,7 +12,9 @@ class Settings(BaseSettings):
 
     # Azure OpenAI
     azure_openai_api_key: str = ""
-    azure_openai_endpoint: str = "https://ai-devteam-resource.cognitiveservices.azure.com"
+    azure_openai_endpoint: str = (
+        "https://ai-devteam-resource.cognitiveservices.azure.com"
+    )
     azure_openai_deployment: str = "gpt-5.2-codex"
 
     # ClickUp

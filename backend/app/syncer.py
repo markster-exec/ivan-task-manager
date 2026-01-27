@@ -116,7 +116,9 @@ class ClickUpSyncer:
             synced_at=datetime.utcnow(),
         )
 
-    async def _fetch_dependencies(self, client: httpx.AsyncClient, task_id: str) -> dict:
+    async def _fetch_dependencies(
+        self, client: httpx.AsyncClient, task_id: str
+    ) -> dict:
         """Fetch task dependencies to determine blocking relationships."""
         blocking = []
         blocked_by = []
@@ -198,7 +200,9 @@ class GitHubSyncer:
 
         # Check labels for revenue/client
         labels = [lbl.get("name", "").lower() for lbl in item.get("labels", [])]
-        is_revenue = any("client" in lbl or "revenue" in lbl or "deal" in lbl for lbl in labels)
+        is_revenue = any(
+            "client" in lbl or "revenue" in lbl or "deal" in lbl for lbl in labels
+        )
 
         # Parse blocking from body
         blocking, blocked_by = self._parse_blocking(item.get("body", ""))
@@ -206,7 +210,9 @@ class GitHubSyncer:
         # Parse last activity
         last_activity = None
         if item.get("updated_at"):
-            last_activity = datetime.fromisoformat(item["updated_at"].replace("Z", "+00:00"))
+            last_activity = datetime.fromisoformat(
+                item["updated_at"].replace("Z", "+00:00")
+            )
 
         return Task(
             id=f"github:{item['number']}",
@@ -270,7 +276,9 @@ async def sync_all_sources() -> dict:
             results["clickup"] = len(clickup_tasks)
 
             # Update sync state
-            sync_state = db.query(SyncState).filter(SyncState.source == "clickup").first()
+            sync_state = (
+                db.query(SyncState).filter(SyncState.source == "clickup").first()
+            )
             if not sync_state:
                 sync_state = SyncState(source="clickup")
                 db.add(sync_state)
@@ -296,7 +304,9 @@ async def sync_all_sources() -> dict:
             results["github"] = len(github_tasks)
 
             # Update sync state
-            sync_state = db.query(SyncState).filter(SyncState.source == "github").first()
+            sync_state = (
+                db.query(SyncState).filter(SyncState.source == "github").first()
+            )
             if not sync_state:
                 sync_state = SyncState(source="github")
                 db.add(sync_state)

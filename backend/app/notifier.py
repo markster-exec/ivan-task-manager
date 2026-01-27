@@ -41,26 +41,36 @@ class SlackNotifier:
         else:
             return start <= now <= end
 
-    def _should_send(self, notification_type: str, task_id: Optional[str], message: str) -> bool:
+    def _should_send(
+        self, notification_type: str, task_id: Optional[str], message: str
+    ) -> bool:
         """Check if notification should be sent (not duplicate, not quiet hours)."""
         if self.is_quiet_hours() and notification_type != "morning":
             logger.debug("Skipping notification during quiet hours")
             return False
 
         # Check for duplicate
-        message_hash = hashlib.md5(f"{notification_type}:{task_id}:{message[:100]}".encode()).hexdigest()
+        message_hash = hashlib.md5(
+            f"{notification_type}:{task_id}:{message[:100]}".encode()
+        ).hexdigest()
         db = SessionLocal()
         try:
-            existing = db.query(NotificationLog).filter(
-                NotificationLog.message_hash == message_hash
-            ).first()
+            existing = (
+                db.query(NotificationLog)
+                .filter(NotificationLog.message_hash == message_hash)
+                .first()
+            )
             return existing is None
         finally:
             db.close()
 
-    def _log_notification(self, notification_type: str, task_id: Optional[str], message: str):
+    def _log_notification(
+        self, notification_type: str, task_id: Optional[str], message: str
+    ):
         """Log sent notification to avoid duplicates."""
-        message_hash = hashlib.md5(f"{notification_type}:{task_id}:{message[:100]}".encode()).hexdigest()
+        message_hash = hashlib.md5(
+            f"{notification_type}:{task_id}:{message[:100]}".encode()
+        ).hexdigest()
         db = SessionLocal()
         try:
             log = NotificationLog(
@@ -73,7 +83,12 @@ class SlackNotifier:
         finally:
             db.close()
 
-    async def send_dm(self, message: str, notification_type: str = "instant", task_id: Optional[str] = None):
+    async def send_dm(
+        self,
+        message: str,
+        notification_type: str = "instant",
+        task_id: Optional[str] = None,
+    ):
         """Send a direct message to Ivan."""
         if not self._should_send(notification_type, task_id, message):
             return False
@@ -132,7 +147,9 @@ Reason: {reason}
 
         # Summary stats
         overdue = sum(1 for t in tasks if get_urgency_label(t.due_date) == "Overdue")
-        due_today = sum(1 for t in tasks if get_urgency_label(t.due_date) == "Due today")
+        due_today = sum(
+            1 for t in tasks if get_urgency_label(t.due_date) == "Due today"
+        )
         blocking = set()
         for t in tasks:
             blocking.update(t.is_blocking or [])
@@ -151,7 +168,9 @@ Type `ivan next` to start working."""
 
         await self.send_dm(message, "morning")
 
-    async def send_hourly_digest(self, new_tasks: list[Task], updated_tasks: list[Task]):
+    async def send_hourly_digest(
+        self, new_tasks: list[Task], updated_tasks: list[Task]
+    ):
         """Send hourly digest of non-urgent updates."""
         if not new_tasks and not updated_tasks:
             return

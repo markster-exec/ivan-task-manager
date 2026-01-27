@@ -47,7 +47,9 @@ async def scheduled_sync():
     # Check for urgent tasks and send instant notifications
     db = SessionLocal()
     try:
-        tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+        tasks = (
+            db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+        )
         tasks = score_and_sort_tasks(tasks)
 
         for task in tasks:
@@ -67,7 +69,9 @@ async def morning_briefing_job():
     # Get tasks
     db = SessionLocal()
     try:
-        tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+        tasks = (
+            db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+        )
         tasks = score_and_sort_tasks(tasks)
         await notifier.send_morning_briefing(tasks)
     finally:
@@ -87,7 +91,9 @@ async def lifespan(app: FastAPI):
     init_db()
 
     # Schedule jobs
-    scheduler.add_job(scheduled_sync, "interval", minutes=settings.sync_interval_minutes)
+    scheduler.add_job(
+        scheduled_sync, "interval", minutes=settings.sync_interval_minutes
+    )
 
     # Parse morning briefing time
     hour, minute = map(int, settings.morning_briefing_time.split(":"))
@@ -253,11 +259,15 @@ async def mark_done(db: Session = Depends(get_db)):
     # TODO: Update in source system (ClickUp/GitHub)
 
     # Get next task
-    remaining = db.query(Task).filter(
-        Task.status != "done",
-        Task.assignee == "ivan",
-        Task.id != task.id,
-    ).all()
+    remaining = (
+        db.query(Task)
+        .filter(
+            Task.status != "done",
+            Task.assignee == "ivan",
+            Task.id != task.id,
+        )
+        .all()
+    )
 
     db.commit()
 
@@ -302,11 +312,15 @@ async def skip_task(db: Session = Depends(get_db)):
     skipped_task = db.query(Task).filter(Task.id == current.task_id).first()
 
     # Get next task (excluding current)
-    remaining = db.query(Task).filter(
-        Task.status != "done",
-        Task.assignee == "ivan",
-        Task.id != current.task_id,
-    ).all()
+    remaining = (
+        db.query(Task)
+        .filter(
+            Task.status != "done",
+            Task.assignee == "ivan",
+            Task.id != current.task_id,
+        )
+        .all()
+    )
 
     if not remaining:
         return ActionResponse(success=True, message="No more tasks", next_task=None)
@@ -353,7 +367,9 @@ async def get_morning_briefing(db: Session = Depends(get_db)):
 
     top_3 = tasks[:3]
     overdue = sum(1 for t in tasks if t.due_date and t.due_date < datetime.now().date())
-    due_today = sum(1 for t in tasks if t.due_date and t.due_date == datetime.now().date())
+    due_today = sum(
+        1 for t in tasks if t.due_date and t.due_date == datetime.now().date()
+    )
 
     blocking = set()
     for t in tasks:
