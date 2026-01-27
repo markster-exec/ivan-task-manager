@@ -15,7 +15,7 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install ruff black
+          pip install ruff==0.2.0 black==24.1.1
       - name: Run ruff
         run: ruff check backend/
       - name: Check black formatting
