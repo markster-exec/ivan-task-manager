@@ -2,6 +2,25 @@
 
 These instructions define the baseline expectations for Codex agents working in this repo.
 
+## Required Reading (BEFORE ANY WORK)
+
+**STOP. Before doing any development work, you MUST read:**
+
+1. **`docs/plans/2026-01-27-product-vision.md`** — The product vision and blueprint
+
+This document explains:
+- What we're building (AI Chief of Staff for a CEO with multiple companies)
+- The 4-layer architecture (Capture → Context → Prioritization → Execution)
+- Entity-centric design (entities have intentions, workstreams, deadlines)
+- Implementation phases and what's already complete
+- How this repo fits into the larger agent-system vision
+
+**Any development work must align with this vision.** Do not add features or make architectural decisions without understanding the full picture.
+
+If the vision document doesn't exist or has been superseded, check for newer files in `docs/plans/` sorted by date.
+
+---
+
 ## Standards
 1. Produce production-ready code.
 2. Write tests for every change (skip only for docs/config-only updates and note why).
@@ -28,11 +47,12 @@ Use `<type>(<scope>): <summary>` where:
 - Deployment: Docker containers on Railway
 
 ### Key Files
+- `docs/plans/2026-01-27-product-vision.md` — **Product vision (read first!)**
 - `backend/app/main.py` — FastAPI application
 - `backend/app/syncer.py` — ClickUp/GitHub task sync
 - `backend/app/scorer.py` — Task prioritization logic
 - `backend/app/notifier.py` — Slack notifications
-- `cli/ivan.py` — CLI client
+- `cli/ivan/__init__.py` — CLI client
 
 ### Testing
 - Run tests: `pytest backend/tests/`

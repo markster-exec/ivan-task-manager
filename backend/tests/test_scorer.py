@@ -1,7 +1,6 @@
 """Tests for the scoring algorithm."""
 
-import pytest
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from app.scorer import (
     calculate_score,

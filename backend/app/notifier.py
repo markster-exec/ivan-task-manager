@@ -79,7 +79,7 @@ class SlackNotifier:
             return False
 
         try:
-            response = self.client.chat_postMessage(
+            self.client.chat_postMessage(
                 channel=self.ivan_user_id,
                 text=message,
                 mrkdwn=True,

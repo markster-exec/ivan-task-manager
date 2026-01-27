@@ -1,27 +1,74 @@
 """Tests for API endpoints."""
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
-from datetime import date, datetime
+from unittest.mock import patch
+from datetime import date
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.main import app
-from app.models import Task, CurrentTask
+from app.models import Base, Task
+
+
+# Create test database with thread safety for TestClient
+test_engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+
+def get_test_db():
+    """Get test database session."""
+    db = TestSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def setup_test_db():
+    """Create tables before each test, drop after."""
+    Base.metadata.create_all(bind=test_engine)
+    yield
+    Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture
 def client():
-    """Create test client."""
-    return TestClient(app)
+    """Create test client with mocked dependencies."""
+    # Import endpoint functions - they use Depends(get_db) which we override
+    from app.main import (
+        health_check,
+        get_tasks,
+        get_next_task,
+        mark_done,
+        skip_task,
+        force_sync,
+        get_morning_briefing,
+        get_db,
+    )
 
+    test_app = FastAPI()
 
-@pytest.fixture
-def mock_db():
-    """Mock database session."""
-    with patch("app.main.get_db") as mock:
-        session = MagicMock()
-        mock.return_value = iter([session])
-        yield session
+    # Add routes manually without lifespan to avoid scheduler issues
+    test_app.get("/health")(health_check)
+    test_app.get("/tasks")(get_tasks)
+    test_app.get("/next")(get_next_task)
+    test_app.post("/done")(mark_done)
+    test_app.post("/skip")(skip_task)
+    test_app.post("/sync")(force_sync)
+    test_app.get("/morning")(get_morning_briefing)
+
+    # Override the database dependency
+    test_app.dependency_overrides[get_db] = get_test_db
+
+    with TestClient(test_app) as c:
+        yield c
 
 
 class TestHealthCheck:
@@ -43,31 +90,31 @@ class TestHealthCheck:
 class TestGetTasks:
     """Test /tasks endpoint."""
 
-    def test_empty_task_list(self, client, mock_db):
+    def test_empty_task_list(self, client):
         """Empty database returns empty list."""
-        mock_db.query.return_value.filter.return_value.all.return_value = []
-
         response = client.get("/tasks")
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_returns_tasks_sorted(self, client, mock_db):
+    def test_returns_tasks_sorted(self, client):
         """Tasks are returned sorted by score."""
-        task1 = MagicMock(spec=Task)
-        task1.id = "1"
-        task1.source = "clickup"
-        task1.title = "Task 1"
-        task1.description = "Desc"
-        task1.status = "todo"
-        task1.assignee = "ivan"
-        task1.due_date = date.today()
-        task1.url = "http://test"
-        task1.is_revenue = False
-        task1.is_blocking = []
-        task1.last_activity = datetime.utcnow()
-        task1.score = 0
-
-        mock_db.query.return_value.filter.return_value.all.return_value = [task1]
+        # Add a task to the test database
+        db = TestSessionLocal()
+        task = Task(
+            id="test:1",
+            source="clickup",
+            title="Task 1",
+            description="Desc",
+            status="todo",
+            assignee="ivan",
+            due_date=date.today(),
+            url="http://test",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
 
         response = client.get("/tasks")
         assert response.status_code == 200
@@ -78,10 +125,8 @@ class TestGetTasks:
 class TestNextTask:
     """Test /next endpoint."""
 
-    def test_no_tasks(self, client, mock_db):
+    def test_no_tasks(self, client):
         """No tasks returns appropriate message."""
-        mock_db.query.return_value.filter.return_value.all.return_value = []
-
         response = client.get("/next")
         assert response.status_code == 200
         data = response.json()
@@ -92,10 +137,8 @@ class TestNextTask:
 class TestDoneEndpoint:
     """Test /done endpoint."""
 
-    def test_no_current_task(self, client, mock_db):
+    def test_no_current_task(self, client):
         """No current task returns error."""
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-
         response = client.post("/done")
         assert response.status_code == 400
 
@@ -103,10 +146,8 @@ class TestDoneEndpoint:
 class TestSkipEndpoint:
     """Test /skip endpoint."""
 
-    def test_no_current_task(self, client, mock_db):
+    def test_no_current_task(self, client):
         """No current task returns error."""
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-
         response = client.post("/skip")
         assert response.status_code == 400
 
@@ -129,10 +170,8 @@ class TestSyncEndpoint:
 class TestMorningBriefing:
     """Test /morning endpoint."""
 
-    def test_morning_returns_structure(self, client, mock_db):
+    def test_morning_returns_structure(self, client):
         """Morning briefing returns expected structure."""
-        mock_db.query.return_value.filter.return_value.all.return_value = []
-
         response = client.get("/morning")
         assert response.status_code == 200
         data = response.json()

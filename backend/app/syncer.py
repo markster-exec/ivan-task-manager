@@ -197,8 +197,8 @@ class GitHubSyncer:
         status = "done" if state == "closed" else "todo"
 
         # Check labels for revenue/client
-        labels = [l.get("name", "").lower() for l in item.get("labels", [])]
-        is_revenue = any("client" in l or "revenue" in l or "deal" in l for l in labels)
+        labels = [lbl.get("name", "").lower() for lbl in item.get("labels", [])]
+        is_revenue = any("client" in lbl or "revenue" in lbl or "deal" in lbl for lbl in labels)
 
         # Parse blocking from body
         blocking, blocked_by = self._parse_blocking(item.get("body", ""))
