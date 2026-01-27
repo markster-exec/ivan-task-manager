@@ -1,8 +1,10 @@
 """Task synchronization from ClickUp and GitHub.
 
 Syncs tasks hourly and caches in local database for token efficiency.
+Includes retry logic with exponential backoff for resilience.
 """
 
+import asyncio
 import re
 import logging
 from datetime import datetime
@@ -15,6 +17,12 @@ from .models import Task, SyncState, SessionLocal
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Retry configuration
+MAX_RETRIES = 3
+BASE_DELAY_SECONDS = 1.0
+MAX_DELAY_SECONDS = 30.0
+RETRYABLE_ERRORS = {"timeout", "connection_error", "server_error", "rate_limit"}
 
 # User mappings
 CLICKUP_USERS = {
@@ -253,71 +261,158 @@ class GitHubSyncer:
         return blocking, blocked_by
 
 
+def _categorize_error(e: Exception) -> tuple[str, str]:
+    """Categorize an exception into error type and message.
+
+    Returns (error_type, error_message) tuple.
+    """
+    if isinstance(e, httpx.HTTPStatusError):
+        status = e.response.status_code
+        if status == 401:
+            return "auth_error", "Authentication failed - check API token"
+        elif status == 403:
+            return "permission_error", "Permission denied - check API permissions"
+        elif status == 404:
+            return "not_found", "Resource not found - check list/repo ID"
+        elif status == 429:
+            return "rate_limit", "Rate limit exceeded - will retry later"
+        elif status >= 500:
+            return "server_error", f"Server error ({status}) - source may be down"
+        else:
+            return "http_error", f"HTTP error {status}: {e.response.text[:100]}"
+    elif isinstance(e, httpx.TimeoutException):
+        return "timeout", "Request timed out - network may be slow"
+    elif isinstance(e, httpx.ConnectError):
+        return "connection_error", "Could not connect - check network"
+    elif isinstance(e, httpx.RequestError):
+        return "request_error", f"Request failed: {str(e)}"
+    else:
+        return "unknown_error", str(e)
+
+
+def _update_sync_state(
+    db, source: str, status: str, error_message: Optional[str] = None
+):
+    """Update sync state for a source."""
+    sync_state = db.query(SyncState).filter(SyncState.source == source).first()
+    if not sync_state:
+        sync_state = SyncState(source=source)
+        db.add(sync_state)
+    sync_state.last_sync = datetime.utcnow()
+    sync_state.status = status
+    sync_state.error_message = error_message
+
+
+async def _sync_with_retry(syncer) -> list[Task]:
+    """Sync with exponential backoff retry for transient errors.
+
+    Retries on: timeout, connection_error, server_error, rate_limit.
+    Fails immediately on: auth_error, permission_error, not_found.
+    """
+    last_exception = None
+    last_error_type = None
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            return await syncer.sync()
+        except Exception as e:
+            error_type, error_message = _categorize_error(e)
+            last_exception = e
+            last_error_type = error_type
+
+            # Don't retry non-transient errors
+            if error_type not in RETRYABLE_ERRORS:
+                logger.warning(f"Non-retryable error ({error_type}): {error_message}")
+                raise
+
+            # Calculate delay with exponential backoff
+            delay = min(
+                BASE_DELAY_SECONDS * (2**attempt),
+                MAX_DELAY_SECONDS,
+            )
+
+            logger.warning(
+                f"Attempt {attempt + 1}/{MAX_RETRIES} failed ({error_type}): "
+                f"{error_message}. Retrying in {delay:.1f}s..."
+            )
+            await asyncio.sleep(delay)
+
+    # All retries exhausted
+    logger.error(f"All {MAX_RETRIES} retry attempts failed ({last_error_type})")
+    raise last_exception
+
+
+async def _sync_source(syncer, source_name: str, db) -> tuple[int, Optional[str]]:
+    """Sync a single source with error handling and retry logic.
+
+    Returns (task_count, error_message or None).
+    """
+    try:
+        # Use retry wrapper for transient errors
+        tasks = await _sync_with_retry(syncer)
+
+        for task in tasks:
+            existing = db.query(Task).filter(Task.id == task.id).first()
+            if existing:
+                for key, value in task.__dict__.items():
+                    if not key.startswith("_"):
+                        setattr(existing, key, value)
+            else:
+                db.add(task)
+
+        _update_sync_state(db, source_name, "success")
+        return len(tasks), None
+
+    except Exception as e:
+        error_type, error_message = _categorize_error(e)
+        logger.error(f"{source_name} sync failed ({error_type}): {error_message}")
+        _update_sync_state(db, source_name, "error", error_message)
+        return 0, f"{source_name}: {error_message}"
+
+
 async def sync_all_sources() -> dict:
-    """Sync tasks from all sources and update database."""
+    """Sync tasks from all sources and update database.
+
+    Each source syncs independently - failures in one don't affect others.
+    Returns dict with task counts per source and any errors.
+    """
     db = SessionLocal()
 
     try:
         results = {"clickup": 0, "github": 0, "errors": []}
 
         # Sync ClickUp
-        try:
-            clickup_syncer = ClickUpSyncer()
-            clickup_tasks = await clickup_syncer.sync()
-            for task in clickup_tasks:
-                existing = db.query(Task).filter(Task.id == task.id).first()
-                if existing:
-                    # Update existing
-                    for key, value in task.__dict__.items():
-                        if not key.startswith("_"):
-                            setattr(existing, key, value)
-                else:
-                    db.add(task)
-            results["clickup"] = len(clickup_tasks)
-
-            # Update sync state
-            sync_state = (
-                db.query(SyncState).filter(SyncState.source == "clickup").first()
-            )
-            if not sync_state:
-                sync_state = SyncState(source="clickup")
-                db.add(sync_state)
-            sync_state.last_sync = datetime.utcnow()
-            sync_state.status = "success"
-
-        except Exception as e:
-            logger.error(f"ClickUp sync failed: {e}")
-            results["errors"].append(f"ClickUp: {str(e)}")
+        if settings.clickup_api_token:
+            count, error = await _sync_source(ClickUpSyncer(), "clickup", db)
+            results["clickup"] = count
+            if error:
+                results["errors"].append(error)
+        else:
+            logger.warning("Skipping ClickUp sync - no API token configured")
+            results["errors"].append("ClickUp: No API token configured")
 
         # Sync GitHub
-        try:
-            github_syncer = GitHubSyncer()
-            github_tasks = await github_syncer.sync()
-            for task in github_tasks:
-                existing = db.query(Task).filter(Task.id == task.id).first()
-                if existing:
-                    for key, value in task.__dict__.items():
-                        if not key.startswith("_"):
-                            setattr(existing, key, value)
-                else:
-                    db.add(task)
-            results["github"] = len(github_tasks)
-
-            # Update sync state
-            sync_state = (
-                db.query(SyncState).filter(SyncState.source == "github").first()
-            )
-            if not sync_state:
-                sync_state = SyncState(source="github")
-                db.add(sync_state)
-            sync_state.last_sync = datetime.utcnow()
-            sync_state.status = "success"
-
-        except Exception as e:
-            logger.error(f"GitHub sync failed: {e}")
-            results["errors"].append(f"GitHub: {str(e)}")
+        if settings.github_token:
+            count, error = await _sync_source(GitHubSyncer(), "github", db)
+            results["github"] = count
+            if error:
+                results["errors"].append(error)
+        else:
+            logger.warning("Skipping GitHub sync - no token configured")
+            results["errors"].append("GitHub: No token configured")
 
         db.commit()
+
+        # Log summary
+        total = results["clickup"] + results["github"]
+        if results["errors"]:
+            logger.warning(
+                f"Sync completed with errors: {total} tasks synced, "
+                f"{len(results['errors'])} sources failed"
+            )
+        else:
+            logger.info(f"Sync completed successfully: {total} tasks synced")
+
         return results
 
     finally:
