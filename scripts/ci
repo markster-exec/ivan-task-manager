@@ -1,0 +1,35 @@
+#!/bin/bash
+# CI script for local testing before push
+# Mirrors what GitHub Actions runs
+
+set -e
+
+echo "=== Ivan Task Manager CI ==="
+
+cd "$(dirname "$0")/.."
+
+echo ""
+echo "=== Installing dependencies ==="
+pip install -r backend/requirements.txt
+pip install pytest pytest-cov ruff
+
+echo ""
+echo "=== Linting ==="
+ruff check backend/
+
+echo ""
+echo "=== Type checking ==="
+# Skip for now - would need mypy setup
+
+echo ""
+echo "=== Running tests ==="
+cd backend
+PYTHONPATH=. pytest tests/ -v --cov=app --cov-report=term-missing
+cd ..
+
+echo ""
+echo "=== Build check ==="
+docker build -t ivan-task-manager:ci-test .
+
+echo ""
+echo "=== All checks passed! ==="

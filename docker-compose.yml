@@ -1,0 +1,41 @@
+# Ivan Task Manager - Local Development
+# Run: docker-compose up
+
+version: "3.9"
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./ivan_tasks.db
+      - LOG_LEVEL=DEBUG
+      - ENV=development
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app/backend
+      - ./cli:/app/cli
+      - task-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: PostgreSQL for production-like local testing
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: ivan
+  #     POSTGRES_PASSWORD: devpassword
+  #     POSTGRES_DB: ivan_tasks
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  task-data:
+  # postgres-data:

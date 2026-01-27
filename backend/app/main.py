@@ -1,0 +1,379 @@
+"""Ivan Task Manager - FastAPI Application.
+
+A unified task management system that aggregates tasks from ClickUp and GitHub,
+provides intelligent prioritization, and delivers actionable notifications.
+"""
+
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Depends
+from pydantic import BaseModel
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy.orm import Session
+
+from .config import get_settings
+from .models import Task, CurrentTask, init_db, get_db, SessionLocal
+from .scorer import score_and_sort_tasks, get_score_breakdown
+from .syncer import sync_all_sources
+from .notifier import SlackNotifier
+
+# Configure logging
+settings = get_settings()
+logging.basicConfig(
+    level=getattr(logging, settings.log_level),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# Scheduler for periodic tasks
+scheduler = AsyncIOScheduler()
+notifier = SlackNotifier()
+
+
+# =============================================================================
+# Scheduled Jobs
+# =============================================================================
+
+
+async def scheduled_sync():
+    """Hourly sync job."""
+    logger.info("Running scheduled sync...")
+    results = await sync_all_sources()
+    logger.info(f"Sync complete: {results}")
+
+    # Check for urgent tasks and send instant notifications
+    db = SessionLocal()
+    try:
+        tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+        tasks = score_and_sort_tasks(tasks)
+
+        for task in tasks:
+            if task.score >= 1000:
+                await notifier.send_instant_notification(task, "High priority task")
+    finally:
+        db.close()
+
+
+async def morning_briefing_job():
+    """Morning briefing job."""
+    logger.info("Sending morning briefing...")
+
+    # Sync first
+    await sync_all_sources()
+
+    # Get tasks
+    db = SessionLocal()
+    try:
+        tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+        tasks = score_and_sort_tasks(tasks)
+        await notifier.send_morning_briefing(tasks)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# App Lifecycle
+# =============================================================================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager."""
+    # Startup
+    logger.info("Starting Ivan Task Manager...")
+    init_db()
+
+    # Schedule jobs
+    scheduler.add_job(scheduled_sync, "interval", minutes=settings.sync_interval_minutes)
+
+    # Parse morning briefing time
+    hour, minute = map(int, settings.morning_briefing_time.split(":"))
+    scheduler.add_job(morning_briefing_job, "cron", hour=hour, minute=minute)
+
+    scheduler.start()
+    logger.info("Scheduler started")
+
+    # Initial sync
+    await sync_all_sources()
+
+    yield
+
+    # Shutdown
+    scheduler.shutdown()
+    logger.info("Ivan Task Manager stopped")
+
+
+app = FastAPI(
+    title="Ivan Task Manager",
+    description="Unified task management with intelligent prioritization",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+
+# =============================================================================
+# Pydantic Models
+# =============================================================================
+
+
+class TaskResponse(BaseModel):
+    id: str
+    source: str
+    title: str
+    description: Optional[str]
+    status: str
+    assignee: Optional[str]
+    due_date: Optional[str]
+    url: str
+    score: int
+    is_revenue: bool
+    is_blocking: list[str]
+    score_breakdown: dict
+
+    class Config:
+        from_attributes = True
+
+
+class NextTaskResponse(BaseModel):
+    task: Optional[TaskResponse]
+    context: Optional[str]
+    message: str
+
+
+class ActionResponse(BaseModel):
+    success: bool
+    message: str
+    next_task: Optional[TaskResponse]
+
+
+# =============================================================================
+# API Routes
+# =============================================================================
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/tasks", response_model=list[TaskResponse])
+async def get_tasks(db: Session = Depends(get_db)):
+    """Get all tasks sorted by priority score."""
+    tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+    tasks = score_and_sort_tasks(tasks)
+
+    return [
+        TaskResponse(
+            id=t.id,
+            source=t.source,
+            title=t.title,
+            description=t.description,
+            status=t.status,
+            assignee=t.assignee,
+            due_date=t.due_date.isoformat() if t.due_date else None,
+            url=t.url,
+            score=t.score,
+            is_revenue=t.is_revenue,
+            is_blocking=t.is_blocking,
+            score_breakdown=get_score_breakdown(t),
+        )
+        for t in tasks
+    ]
+
+
+@app.get("/next", response_model=NextTaskResponse)
+async def get_next_task(db: Session = Depends(get_db)):
+    """Get the highest priority task to work on."""
+    tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+
+    if not tasks:
+        return NextTaskResponse(task=None, context=None, message="No tasks in queue!")
+
+    tasks = score_and_sort_tasks(tasks)
+    task = tasks[0]
+
+    # Update current task tracker
+    current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
+    if not current:
+        current = CurrentTask(user_id="ivan")
+        db.add(current)
+    current.task_id = task.id
+    current.started_at = datetime.utcnow()
+    db.commit()
+
+    # Build context
+    breakdown = get_score_breakdown(task)
+    context_parts = []
+    if task.is_revenue:
+        context_parts.append("Revenue task")
+    if task.is_blocking:
+        context_parts.append(f"Blocking: {', '.join(task.is_blocking)}")
+    context_parts.append(breakdown["urgency_label"])
+
+    return NextTaskResponse(
+        task=TaskResponse(
+            id=task.id,
+            source=task.source,
+            title=task.title,
+            description=task.description,
+            status=task.status,
+            assignee=task.assignee,
+            due_date=task.due_date.isoformat() if task.due_date else None,
+            url=task.url,
+            score=task.score,
+            is_revenue=task.is_revenue,
+            is_blocking=task.is_blocking,
+            score_breakdown=breakdown,
+        ),
+        context=" | ".join(context_parts),
+        message=f"Focus on: {task.title}",
+    )
+
+
+@app.post("/done", response_model=ActionResponse)
+async def mark_done(db: Session = Depends(get_db)):
+    """Mark current task as done and get next task."""
+    current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
+
+    if not current or not current.task_id:
+        raise HTTPException(status_code=400, detail="No current task to complete")
+
+    task = db.query(Task).filter(Task.id == current.task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Current task not found")
+
+    # Mark as done
+    task.status = "done"
+    task.updated_at = datetime.utcnow()
+
+    # TODO: Update in source system (ClickUp/GitHub)
+
+    # Get next task
+    remaining = db.query(Task).filter(
+        Task.status != "done",
+        Task.assignee == "ivan",
+        Task.id != task.id,
+    ).all()
+
+    db.commit()
+
+    next_task = None
+    if remaining:
+        remaining = score_and_sort_tasks(remaining)
+        next_task = remaining[0]
+        current.task_id = next_task.id
+        current.started_at = datetime.utcnow()
+        db.commit()
+
+        next_task = TaskResponse(
+            id=next_task.id,
+            source=next_task.source,
+            title=next_task.title,
+            description=next_task.description,
+            status=next_task.status,
+            assignee=next_task.assignee,
+            due_date=next_task.due_date.isoformat() if next_task.due_date else None,
+            url=next_task.url,
+            score=next_task.score,
+            is_revenue=next_task.is_revenue,
+            is_blocking=next_task.is_blocking,
+            score_breakdown=get_score_breakdown(next_task),
+        )
+
+    return ActionResponse(
+        success=True,
+        message=f"Completed: {task.title}",
+        next_task=next_task,
+    )
+
+
+@app.post("/skip", response_model=ActionResponse)
+async def skip_task(db: Session = Depends(get_db)):
+    """Skip current task and get next one."""
+    current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
+
+    if not current or not current.task_id:
+        raise HTTPException(status_code=400, detail="No current task to skip")
+
+    skipped_task = db.query(Task).filter(Task.id == current.task_id).first()
+
+    # Get next task (excluding current)
+    remaining = db.query(Task).filter(
+        Task.status != "done",
+        Task.assignee == "ivan",
+        Task.id != current.task_id,
+    ).all()
+
+    if not remaining:
+        return ActionResponse(success=True, message="No more tasks", next_task=None)
+
+    remaining = score_and_sort_tasks(remaining)
+    next_task = remaining[0]
+
+    current.task_id = next_task.id
+    current.started_at = datetime.utcnow()
+    db.commit()
+
+    return ActionResponse(
+        success=True,
+        message=f"Skipped: {skipped_task.title if skipped_task else 'Unknown'}",
+        next_task=TaskResponse(
+            id=next_task.id,
+            source=next_task.source,
+            title=next_task.title,
+            description=next_task.description,
+            status=next_task.status,
+            assignee=next_task.assignee,
+            due_date=next_task.due_date.isoformat() if next_task.due_date else None,
+            url=next_task.url,
+            score=next_task.score,
+            is_revenue=next_task.is_revenue,
+            is_blocking=next_task.is_blocking,
+            score_breakdown=get_score_breakdown(next_task),
+        ),
+    )
+
+
+@app.post("/sync")
+async def force_sync():
+    """Force sync from all sources."""
+    results = await sync_all_sources()
+    return {"success": True, "results": results}
+
+
+@app.get("/morning")
+async def get_morning_briefing(db: Session = Depends(get_db)):
+    """Get morning briefing data."""
+    tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
+    tasks = score_and_sort_tasks(tasks)
+
+    top_3 = tasks[:3]
+    overdue = sum(1 for t in tasks if t.due_date and t.due_date < datetime.now().date())
+    due_today = sum(1 for t in tasks if t.due_date and t.due_date == datetime.now().date())
+
+    blocking = set()
+    for t in tasks:
+        blocking.update(t.is_blocking or [])
+
+    return {
+        "top_tasks": [
+            {
+                "title": t.title,
+                "score": t.score,
+                "url": t.url,
+                "breakdown": get_score_breakdown(t),
+            }
+            for t in top_3
+        ],
+        "summary": {
+            "total_tasks": len(tasks),
+            "overdue": overdue,
+            "due_today": due_today,
+            "blocking_count": len(blocking),
+            "blocking": list(blocking),
+        },
+    }
