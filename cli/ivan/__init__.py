@@ -29,19 +29,58 @@ API_BASE = os.getenv("IVAN_API_URL", "http://localhost:8000")
 console = Console()
 
 
+def _handle_api_error(error: Exception, endpoint: str) -> None:
+    """Handle API errors with user-friendly messages."""
+    if isinstance(error, httpx.ConnectError):
+        console.print()
+        console.print("[red]⚠️  Cannot connect to Ivan Task Manager API[/red]")
+        console.print()
+        console.print(f"[dim]Tried: {API_BASE}{endpoint}[/dim]")
+        console.print()
+        console.print("[dim]Possible causes:[/dim]")
+        console.print("[dim]  • API server is not running[/dim]")
+        console.print("[dim]  • IVAN_API_URL environment variable is incorrect[/dim]")
+        console.print("[dim]  • Network connectivity issues[/dim]")
+        console.print()
+        console.print(
+            "[dim]If using Railway: export IVAN_API_URL=https://your-app.up.railway.app[/dim]"
+        )
+    elif isinstance(error, httpx.TimeoutException):
+        console.print()
+        console.print("[red]⚠️  Request timed out[/red]")
+        console.print(
+            "[dim]The API is taking too long to respond. Try again later.[/dim]"
+        )
+    elif isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        console.print()
+        if status == 400:
+            # Try to get error message from response
+            try:
+                detail = error.response.json().get("detail", "Bad request")
+                console.print(f"[red]⚠️  {detail}[/red]")
+            except Exception:
+                console.print("[red]⚠️  Bad request[/red]")
+        elif status == 404:
+            console.print(f"[red]⚠️  Endpoint not found: {endpoint}[/red]")
+        elif status >= 500:
+            console.print("[red]⚠️  Server error - the API is having issues[/red]")
+        else:
+            console.print(f"[red]⚠️  API Error: HTTP {status}[/red]")
+    else:
+        console.print()
+        console.print(f"[red]⚠️  Unexpected error: {error}[/red]")
+    sys.exit(1)
+
+
 def api_get(endpoint: str) -> dict:
     """Make GET request to API."""
     try:
         response = httpx.get(f"{API_BASE}{endpoint}", timeout=30)
         response.raise_for_status()
         return response.json()
-    except httpx.ConnectError:
-        console.print("[red]Error: Cannot connect to Ivan Task Manager API[/red]")
-        console.print(f"[dim]Tried: {API_BASE}[/dim]")
-        sys.exit(1)
-    except httpx.HTTPStatusError as e:
-        console.print(f"[red]API Error: {e.response.status_code}[/red]")
-        sys.exit(1)
+    except Exception as e:
+        _handle_api_error(e, endpoint)
 
 
 def api_post(endpoint: str, data: Optional[dict] = None) -> dict:
@@ -50,12 +89,8 @@ def api_post(endpoint: str, data: Optional[dict] = None) -> dict:
         response = httpx.post(f"{API_BASE}{endpoint}", json=data or {}, timeout=30)
         response.raise_for_status()
         return response.json()
-    except httpx.ConnectError:
-        console.print("[red]Error: Cannot connect to Ivan Task Manager API[/red]")
-        sys.exit(1)
-    except httpx.HTTPStatusError as e:
-        console.print(f"[red]API Error: {e.response.status_code}[/red]")
-        sys.exit(1)
+    except Exception as e:
+        _handle_api_error(e, endpoint)
 
 
 def format_task(task: dict, show_context: bool = True) -> Panel:
@@ -98,25 +133,32 @@ def cli():
 @cli.command()
 def next():
     """Show the highest priority task to work on."""
-    data = api_get("/next")
+    with console.status("[bold blue]Finding your next task...", spinner="dots"):
+        data = api_get("/next")
 
     if not data.get("task"):
+        console.print()
         console.print("[green]✨ No tasks in queue. Enjoy your day![/green]")
+        console.print()
         return
 
     task = data["task"]
     console.print()
     console.print(format_task(task))
     console.print()
-    console.print("[dim]When done: [bold]ivan done[/bold] | To skip: [bold]ivan skip[/bold][/dim]")
+    console.print(
+        "[dim]When done: [bold]ivan done[/bold] | To skip: [bold]ivan skip[/bold][/dim]"
+    )
 
 
 @cli.command()
 def done():
     """Mark current task as complete and show next."""
-    data = api_post("/done")
+    with console.status("[bold blue]Marking task complete...", spinner="dots"):
+        data = api_post("/done")
 
     if data.get("success"):
+        console.print()
         console.print(f"[green]✓[/green] {data.get('message', 'Task completed')}")
 
         if data.get("next_task"):
@@ -126,16 +168,22 @@ def done():
         else:
             console.print()
             console.print("[green]✨ All done! No more tasks.[/green]")
+        console.print()
     else:
-        console.print(f"[red]Error: {data.get('message', 'Unknown error')}[/red]")
+        console.print()
+        console.print(f"[red]⚠️  {data.get('message', 'Could not complete task')}[/red]")
+        console.print("[dim]Tip: Run [bold]ivan next[/bold] first to get a task.[/dim]")
+        console.print()
 
 
 @cli.command()
 def skip():
     """Skip current task and show next one."""
-    data = api_post("/skip")
+    with console.status("[bold blue]Skipping to next task...", spinner="dots"):
+        data = api_post("/skip")
 
     if data.get("success"):
+        console.print()
         console.print(f"[yellow]→[/yellow] {data.get('message', 'Task skipped')}")
 
         if data.get("next_task"):
@@ -145,8 +193,12 @@ def skip():
         else:
             console.print()
             console.print("[dim]No more tasks.[/dim]")
+        console.print()
     else:
-        console.print(f"[red]Error: {data.get('message', 'Unknown error')}[/red]")
+        console.print()
+        console.print(f"[red]⚠️  {data.get('message', 'Could not skip task')}[/red]")
+        console.print("[dim]Tip: Run [bold]ivan next[/bold] first to get a task.[/dim]")
+        console.print()
 
 
 @cli.command()
@@ -192,7 +244,9 @@ def tasks():
     console.print()
     console.print(table)
     console.print()
-    console.print(f"[dim]Total: {len(data)} tasks | Run [bold]ivan next[/bold] to start working[/dim]")
+    console.print(
+        f"[dim]Total: {len(data)} tasks | Run [bold]ivan next[/bold] to start working[/dim]"
+    )
 
 
 @cli.command()
@@ -209,7 +263,9 @@ def morning():
     for i, task in enumerate(data.get("top_tasks", []), 1):
         breakdown = task.get("breakdown", {})
         console.print(f"\n{i}. [bold]{task.get('title', 'Untitled')}[/bold]")
-        console.print(f"   Score: {task.get('score', 0)} | {breakdown.get('urgency_label', '')}")
+        console.print(
+            f"   Score: {task.get('score', 0)} | {breakdown.get('urgency_label', '')}"
+        )
         console.print(f"   🔗 {task.get('url', 'No URL')}")
 
     # Summary
@@ -219,7 +275,9 @@ def morning():
     console.print(f"• {summary.get('overdue', 0)} tasks overdue")
     console.print(f"• {summary.get('due_today', 0)} tasks due today")
     blocking = summary.get("blocking", [])
-    console.print(f"• {len(blocking)} people waiting on you ({', '.join(blocking) if blocking else 'none'})")
+    console.print(
+        f"• {len(blocking)} people waiting on you ({', '.join(blocking) if blocking else 'none'})"
+    )
 
     console.print()
     console.print("[dim]Type [bold]ivan next[/bold] to start working.[/dim]")
@@ -228,19 +286,51 @@ def morning():
 @cli.command()
 def sync():
     """Force sync from all sources."""
-    console.print("[dim]Syncing...[/dim]")
-    data = api_post("/sync")
+    console.print()
+
+    with console.status(
+        "[bold blue]Syncing from ClickUp and GitHub...", spinner="dots"
+    ):
+        data = api_post("/sync")
 
     if data.get("success"):
         results = data.get("results", {})
-        console.print(f"[green]✓[/green] Synced {results.get('clickup', 0)} from ClickUp")
-        console.print(f"[green]✓[/green] Synced {results.get('github', 0)} from GitHub")
+        clickup_count = results.get("clickup", 0)
+        github_count = results.get("github", 0)
+        errors = results.get("errors", [])
 
-        if results.get("errors"):
-            for error in results["errors"]:
-                console.print(f"[red]✗[/red] {error}")
+        # Show success counts
+        if clickup_count > 0:
+            console.print(f"[green]✓[/green] ClickUp: {clickup_count} tasks synced")
+        else:
+            console.print("[dim]○[/dim] ClickUp: No tasks found")
+
+        if github_count > 0:
+            console.print(f"[green]✓[/green] GitHub: {github_count} issues synced")
+        else:
+            console.print("[dim]○[/dim] GitHub: No issues found")
+
+        # Show errors
+        if errors:
+            console.print()
+            console.print("[bold yellow]⚠️  Some sources had issues:[/bold yellow]")
+            for error in errors:
+                console.print(f"[yellow]  • {error}[/yellow]")
+
+        # Summary
+        total = clickup_count + github_count
+        console.print()
+        if total > 0:
+            console.print(
+                f"[dim]Total: {total} tasks synced. Run [bold]ivan tasks[/bold] to see them.[/dim]"
+            )
+        else:
+            console.print(
+                "[dim]No tasks synced. Check API tokens in Railway settings.[/dim]"
+            )
     else:
-        console.print("[red]Sync failed[/red]")
+        console.print("[red]✗ Sync failed[/red]")
+        console.print("[dim]Check the API logs for details.[/dim]")
 
 
 @cli.command()
