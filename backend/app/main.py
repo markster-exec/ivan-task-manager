@@ -15,7 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .models import Task, CurrentTask, init_db, get_db, SessionLocal
+from .models import Task, CurrentTask, DigestState, init_db, get_db, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
 from .notifier import SlackNotifier
@@ -68,6 +68,64 @@ async def scheduled_sync():
         db.close()
 
 
+async def hourly_digest_job():
+    """Hourly digest job - sends updates for non-urgent tasks."""
+    logger.info("Running hourly digest job...")
+
+    db = SessionLocal()
+    try:
+        # Get or create digest state
+        digest_state = db.query(DigestState).first()
+        if not digest_state:
+            digest_state = DigestState()
+            db.add(digest_state)
+            db.commit()
+            # First run - don't send digest, just set baseline
+            logger.info("First digest run - setting baseline")
+            return
+
+        last_digest = digest_state.last_digest_at
+
+        # Find new tasks (created since last digest)
+        new_tasks = (
+            db.query(Task)
+            .filter(
+                Task.assignee == "ivan",
+                Task.status != "done",
+                Task.created_at > last_digest,
+            )
+            .all()
+        )
+
+        # Find updated tasks (updated since last digest, but created before)
+        updated_tasks = (
+            db.query(Task)
+            .filter(
+                Task.assignee == "ivan",
+                Task.status != "done",
+                Task.updated_at > last_digest,
+                Task.created_at <= last_digest,
+            )
+            .all()
+        )
+
+        # Only send if there are updates
+        if new_tasks or updated_tasks:
+            await notifier.send_hourly_digest(new_tasks, updated_tasks)
+            logger.info(
+                f"Digest sent: {len(new_tasks)} new, {len(updated_tasks)} updated"
+            )
+        else:
+            logger.info("No updates for digest")
+
+        # Update last digest time
+        digest_state.last_digest_at = datetime.utcnow()
+        db.commit()
+
+    finally:
+        db.close()
+
+
 async def morning_briefing_job():
     """Morning briefing job."""
     logger.info("Sending morning briefing...")
@@ -105,6 +163,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(
         scheduled_sync, "interval", minutes=settings.sync_interval_minutes
     )
+
+    # Hourly digest job - runs every hour on the half-hour
+    scheduler.add_job(hourly_digest_job, "cron", minute=30)
 
     # Parse morning briefing time
     hour, minute = map(int, settings.morning_briefing_time.split(":"))

@@ -107,6 +107,15 @@ class NotificationLog(Base):
     sent_at = Column(DateTime, default=datetime.utcnow)
 
 
+class DigestState(Base):
+    """Tracks when hourly digest was last sent."""
+
+    __tablename__ = "digest_state"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    last_digest_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db():
     """Initialize database tables."""
     Base.metadata.create_all(bind=engine)
