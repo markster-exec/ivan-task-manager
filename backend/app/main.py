@@ -20,6 +20,15 @@ from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
 from .notifier import SlackNotifier
 
+# Bot is optional - only imported if slack_bolt is available
+try:
+    from .bot import start_bot
+
+    BOT_AVAILABLE = True
+except ImportError:
+    BOT_AVAILABLE = False
+    start_bot = None
+
 # Configure logging
 settings = get_settings()
 logging.basicConfig(
@@ -86,6 +95,8 @@ async def morning_briefing_job():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
+    import asyncio
+
     # Startup
     logger.info("Starting Ivan Task Manager...")
     init_db()
@@ -105,9 +116,25 @@ async def lifespan(app: FastAPI):
     # Initial sync
     await sync_all_sources()
 
+    # Start Slack bot in background if app token is configured
+    bot_task = None
+    if BOT_AVAILABLE and settings.slack_app_token:
+        logger.info("Starting Slack bot...")
+        bot_task = asyncio.create_task(start_bot())
+    elif not BOT_AVAILABLE:
+        logger.warning("slack_bolt not installed - bot disabled")
+    else:
+        logger.warning("SLACK_APP_TOKEN not set - bot disabled")
+
     yield
 
     # Shutdown
+    if bot_task:
+        bot_task.cancel()
+        try:
+            await bot_task
+        except asyncio.CancelledError:
+            pass
     scheduler.shutdown()
     logger.info("Ivan Task Manager stopped")
 
