@@ -14,9 +14,6 @@ import logging
 import re
 from typing import Optional
 
-from slack_bolt.async_app import AsyncApp
-from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
-
 from .config import get_settings
 from .models import Task, CurrentTask, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
@@ -24,9 +21,6 @@ from .syncer import sync_all_sources
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
-
-# Initialize Slack Bolt app
-app = AsyncApp(token=settings.slack_bot_token)
 
 
 # =============================================================================
@@ -65,12 +59,16 @@ async def handle_next(user_id: str) -> str:
             flags.append(f"🚫 Blocking: {', '.join(task.is_blocking)}")
         flags.append(f"⏰ {breakdown['urgency_label']}")
 
+        desc = task.description or "No description"
+        if len(desc) > 200:
+            desc = desc[:200] + "..."
+
         return f"""🎯 *Focus on this:*
 
 *{task.title}*
 Score: {task.score} | {' | '.join(flags)}
 
-{task.description[:200] + '...' if task.description and len(task.description) > 200 else task.description or 'No description'}
+{desc}
 
 🔗 {task.url}
 
@@ -313,70 +311,79 @@ async def route_message(text: str, user_id: str) -> Optional[str]:
 
 
 # =============================================================================
-# Slack Event Handlers
-# =============================================================================
-
-
-@app.event("message")
-async def handle_message_events(event: dict, say):
-    """Handle incoming messages."""
-    # Ignore bot messages
-    if event.get("bot_id"):
-        return
-
-    # Only respond to DMs (channel type "im")
-    if event.get("channel_type") != "im":
-        return
-
-    text = event.get("text", "")
-    user_id = event.get("user", "")
-
-    logger.info(f"Received DM from {user_id}: {text}")
-
-    response = await route_message(text, user_id)
-
-    if response:
-        await say(response)
-    else:
-        # Unknown command - show help
-        await say(
-            "🤔 I didn't understand that. Here's what I can do:\n\n"
-            + await handle_help(user_id)
-        )
-
-
-@app.event("app_mention")
-async def handle_app_mention(event: dict, say):
-    """Handle @mentions in channels."""
-    text = event.get("text", "")
-    user_id = event.get("user", "")
-
-    # Remove the mention itself
-    text = re.sub(r"<@[A-Z0-9]+>", "", text).strip()
-
-    logger.info(f"Mentioned by {user_id}: {text}")
-
-    response = await route_message(text, user_id)
-
-    if response:
-        await say(response)
-    else:
-        await say('👋 DM me for task management! Say "help" to see commands.')
-
-
-# =============================================================================
 # Bot Runner
 # =============================================================================
 
 
+def create_app():
+    """Create and configure the Slack Bolt app."""
+    from slack_bolt.async_app import AsyncApp
+
+    bolt_app = AsyncApp(token=settings.slack_bot_token)
+
+    @bolt_app.event("message")
+    async def handle_message_events(event: dict, say):
+        """Handle incoming messages."""
+        # Ignore bot messages
+        if event.get("bot_id"):
+            return
+
+        # Only respond to DMs (channel type "im")
+        if event.get("channel_type") != "im":
+            return
+
+        text = event.get("text", "")
+        user_id = event.get("user", "")
+
+        logger.info(f"Received DM from {user_id}: {text}")
+
+        response = await route_message(text, user_id)
+
+        if response:
+            await say(response)
+        else:
+            # Unknown command - show help
+            await say(
+                "🤔 I didn't understand that. Here's what I can do:\n\n"
+                + await handle_help(user_id)
+            )
+
+    @bolt_app.event("app_mention")
+    async def handle_app_mention(event: dict, say):
+        """Handle @mentions in channels."""
+        text = event.get("text", "")
+        user_id = event.get("user", "")
+
+        # Remove the mention itself
+        text = re.sub(r"<@[A-Z0-9]+>", "", text).strip()
+
+        logger.info(f"Mentioned by {user_id}: {text}")
+
+        response = await route_message(text, user_id)
+
+        if response:
+            await say(response)
+        else:
+            await say('👋 DM me for task management! Say "help" to see commands.')
+
+    return bolt_app
+
+
 async def start_bot():
     """Start the Slack bot."""
+    if not settings.slack_bot_token:
+        logger.error("SLACK_BOT_TOKEN not set - bot cannot start")
+        return
+
     if not settings.slack_app_token:
         logger.error("SLACK_APP_TOKEN not set - bot cannot start")
         return
 
+    from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
+
     logger.info("Starting Slack bot in Socket Mode...")
-    handler = AsyncSocketModeHandler(app, settings.slack_app_token)
+    bolt_app = create_app()
+    handler = AsyncSocketModeHandler(bolt_app, settings.slack_app_token)
     await handler.start_async()
 
 
