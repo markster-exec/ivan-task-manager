@@ -30,6 +30,7 @@ Phase 4B — Entity awareness (context for tasks)
 | Phase 4D | Planned | Rich Slack input (files, docs) |
 | Phase 4E | Planned | Image/screenshot processing |
 | Phase 4F | Planned | Event-driven notifications (not score-based) |
+| Phase 4G | Planned | Google Drive folder structure mirroring entities |
 
 ## Done This Session
 
@@ -58,4 +59,4 @@ Phase 4A is merged. To start Phase 4B:
 
 - Product vision: `docs/plans/2026-01-27-product-vision.md`
 - Phase 4 roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
-- GitHub Issues: #1 (4A done), #2 (4B), #3 (4C), #4 (4D), #5 (4E), #7 (4F)
+- GitHub Issues: #1 (4A done), #2 (4B), #3 (4C), #4 (4D), #5 (4E), #7 (4F), #8 (4G)
