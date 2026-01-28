@@ -31,11 +31,11 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 
 **Current Phase:** Phase 4 (as of 2026-01-28)
 - Roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
-- Issues: #24-28 in `markster-exec/project-tracker`
+- Issues: #1-5 in this repo (`markster-exec/ivan-task-manager`)
 
 **Track progress on GitHub:**
 - Update issue comments when starting/completing work
-- Reference issues in commits: `feat(bot): add links (project-tracker#24)`
+- Reference issues in commits: `feat(bot): add links (#1)`
 
 **Creating a new phase:**
 1. Copy `docs/templates/phase-roadmap-template.md`
@@ -62,7 +62,7 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 
 **Next:** Phase 4A — See `docs/plans/2026-01-28-phase-4-roadmap.md` for full spec.
 
-**GitHub Issues:** #24 (4A), #25 (4B), #26 (4C), #27 (4D), #28 (4E) in `markster-exec/project-tracker`
+**GitHub Issues:** #1 (4A), #2 (4B), #3 (4C), #4 (4D), #5 (4E) in this repo
 
 ## Commands
 

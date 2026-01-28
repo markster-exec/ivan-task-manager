@@ -503,15 +503,15 @@ Environment:
 
 ## GitHub Issues
 
-Create these issues in `markster-exec/project-tracker`:
+Issues tracked in this repo (`markster-exec/ivan-task-manager`):
 
-| Issue | Title | Labels |
-|-------|-------|--------|
-| #X | `[PRODUCT] TASK - Phase 4A: Bot Communication Fix` | `priority:high`, `area:product` |
-| #X | `[PRODUCT] TASK - Phase 4B: Entity Awareness` | `priority:high`, `area:product` |
-| #X | `[CORE] TASK - Phase 4C: Bidirectional Sync` | `priority:medium`, `area:core` |
-| #X | `[CORE] TASK - Phase 4D: Rich Slack Input` | `priority:medium`, `area:core` |
-| #X | `[CORE] TASK - Phase 4E: Image/Screenshot Processing` | `priority:low`, `area:core` |
+| Issue | Title |
+|-------|-------|
+| #1 | Phase 4A: Bot Communication Fix |
+| #2 | Phase 4B: Entity Awareness |
+| #3 | Phase 4C: Bidirectional Sync |
+| #4 | Phase 4D: Rich Slack Input |
+| #5 | Phase 4E: Image/Screenshot Processing |
 
 ---
 
