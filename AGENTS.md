@@ -14,7 +14,7 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 | Directory | Purpose |
 |-----------|---------|
 | `backend/app/` | FastAPI application (main.py, bot.py, syncer.py, scorer.py, notifier.py) |
-| `backend/tests/` | pytest test suite (29 tests) |
+| `backend/tests/` | pytest test suite (42 tests) |
 | `cli/ivan/` | CLI client (`ivan next`, `done`, `skip`, etc.) |
 | `docs/` | Documentation with YAML front matter |
 | `docs/plans/` | Product vision, roadmaps, design documents |
@@ -54,13 +54,19 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1-3 | **Complete** | Core, Slack bot, error handling, CLI |
-| Phase 4A | Planned | Bot communication fix (links, threading) |
+| Phase 4A | **In PR** | Bot communication fix (links, threading) — PR #6 |
 | Phase 4B | Planned | Entity awareness (context for tasks) |
 | Phase 4C | Planned | Bidirectional sync (write to sources) |
 | Phase 4D | Planned | Rich Slack input (files, docs) |
 | Phase 4E | Planned | Image/screenshot processing |
 
-**Next:** Phase 4A — See `docs/plans/2026-01-28-phase-4-roadmap.md` for full spec.
+**Active Work:**
+- Branch: `issue-1-bot-communication-fix`
+- PR: https://github.com/markster-exec/ivan-task-manager/pull/6
+- CI: ✅ Passing
+- Status: Ready for review/merge
+
+**Next:** Merge PR #6, then start Phase 4B (Issue #2)
 
 **GitHub Issues:** #1 (4A), #2 (4B), #3 (4C), #4 (4D), #5 (4E) in this repo
 
@@ -109,6 +115,7 @@ railway up
 |------|---------|
 | `backend/app/main.py` | FastAPI application + scheduled jobs |
 | `backend/app/bot.py` | Slack bot listener (Socket Mode) |
+| `backend/app/slack_blocks.py` | Slack Block Kit formatting utilities |
 | `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
 | `backend/app/scorer.py` | Task prioritization (Revenue → Blocking → Urgency → Recency) |
 | `backend/app/notifier.py` | Slack notifications (instant, digest, morning) |
