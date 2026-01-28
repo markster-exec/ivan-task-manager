@@ -1,6 +1,5 @@
 """Tests for entity Pydantic models."""
 
-import pytest
 from datetime import date
 
 

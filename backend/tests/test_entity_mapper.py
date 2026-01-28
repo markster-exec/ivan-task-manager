@@ -3,7 +3,6 @@
 import pytest
 import tempfile
 from pathlib import Path
-from datetime import date
 
 from app.models import Task
 
