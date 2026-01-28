@@ -18,6 +18,7 @@ from .config import get_settings
 from .models import Task, CurrentTask, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
+from .entity_loader import find_entity_by_name, get_all_entities
 from . import slack_blocks
 
 settings = get_settings()
@@ -348,6 +349,77 @@ async def handle_help(user_id: str) -> dict:
     return {"text": text, "blocks": blocks}
 
 
+async def handle_entity(user_id: str, entity_name: str) -> dict:
+    """Get entity information.
+
+    Returns:
+        dict with 'text' and 'blocks'
+    """
+    entity = find_entity_by_name(entity_name)
+    if not entity:
+        return {"text": f"Entity '{entity_name}' not found."}
+
+    # Build response
+    text = f"*{entity.name}* — {entity.company or 'N/A'}"
+
+    blocks = [
+        slack_blocks.section(f"*{entity.name}* — {entity.company or 'N/A'}"),
+    ]
+
+    if entity.intention:
+        blocks.append(slack_blocks.context(f"Intention: {entity.intention}"))
+
+    # Priority stars
+    priority_stars = "*" * entity.get_priority()
+    blocks.append(slack_blocks.context(f"Priority: {priority_stars} ({entity.relationship_type or 'unset'})"))
+
+    # Active workstream
+    active_ws = entity.get_active_workstream()
+    if active_ws:
+        deadline = f" — due {active_ws.deadline}" if active_ws.deadline else ""
+        blocks.append(slack_blocks.section(f"*Active:* {active_ws.name}{deadline}"))
+
+    # Channels
+    if entity.channels:
+        channel_links = []
+        for key, value in entity.channels.items():
+            if key == "gdoc":
+                url = f"https://docs.google.com/document/d/{value}"
+            elif key == "github" and not value.startswith("http"):
+                url = f"https://github.com/{value}"
+            else:
+                url = value
+            channel_links.append(f"<{url}|{key.capitalize()}>")
+        blocks.append(slack_blocks.context(" | ".join(channel_links)))
+
+    return {"text": text, "blocks": blocks}
+
+
+async def handle_projects(user_id: str) -> dict:
+    """List all entities with active workstreams.
+
+    Returns:
+        dict with 'text' and 'blocks'
+    """
+    entities = get_all_entities()
+    active = [e for e in entities if e.get_active_workstream()]
+
+    if not active:
+        return {"text": "No active workstreams."}
+
+    text = "Active Workstreams"
+    blocks = [slack_blocks.section("*Active Workstreams*"), slack_blocks.divider()]
+
+    for entity in sorted(active, key=lambda e: -e.get_priority()):
+        ws = entity.get_active_workstream()
+        deadline = f" — due {ws.deadline}" if ws.deadline else ""
+        blocks.append(
+            slack_blocks.section(f"*{entity.name}* ({entity.company or 'N/A'})\n-> {ws.name}{deadline}")
+        )
+
+    return {"text": text, "blocks": blocks}
+
+
 # =============================================================================
 # Message Router
 # =============================================================================
@@ -360,6 +432,7 @@ COMMAND_PATTERNS = [
     (r"\b(tasks|show (my )?tasks|list|todo)\b", handle_tasks),
     (r"\b(morning|briefing|brief me)\b", handle_morning),
     (r"\b(sync|refresh|update)\b", handle_sync),
+    (r"\b(projects|workstreams)\b", handle_projects),
     (r"\b(help|commands|\?)\b", handle_help),
 ]
 
@@ -371,6 +444,7 @@ INTENT_HANDLERS = {
     "tasks": handle_tasks,
     "morning": handle_morning,
     "sync": handle_sync,
+    "projects": handle_projects,
     "help": handle_help,
 }
 
@@ -432,7 +506,12 @@ async def route_message(text: str, user_id: str) -> Optional[dict]:
     """
     text_lower = text.lower().strip()
 
-    # Try regex patterns first (fast path)
+    # Check for entity query first
+    entity_match = re.search(r"(?:entity|what'?s happening with|status of)\s+(\w+)", text_lower)
+    if entity_match:
+        return await handle_entity(user_id, entity_match.group(1))
+
+    # Try regex patterns (fast path)
     for pattern, handler in COMMAND_PATTERNS:
         if re.search(pattern, text_lower):
             return await handler(user_id)
