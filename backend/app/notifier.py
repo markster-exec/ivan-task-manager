@@ -88,17 +88,29 @@ class SlackNotifier:
         message: str,
         notification_type: str = "instant",
         task_id: Optional[str] = None,
+        thread_ts: Optional[str] = None,
     ):
-        """Send a direct message to Ivan."""
+        """Send a direct message to Ivan.
+
+        Args:
+            message: The message to send
+            notification_type: Type for deduplication (instant, morning, digest)
+            task_id: Optional task ID for deduplication
+            thread_ts: Optional thread timestamp to reply in a thread
+        """
         if not self._should_send(notification_type, task_id, message):
             return False
 
         try:
-            self.client.chat_postMessage(
-                channel=self.ivan_user_id,
-                text=message,
-                mrkdwn=True,
-            )
+            kwargs = {
+                "channel": self.ivan_user_id,
+                "text": message,
+                "mrkdwn": True,
+            }
+            if thread_ts:
+                kwargs["thread_ts"] = thread_ts
+
+            self.client.chat_postMessage(**kwargs)
             self._log_notification(notification_type, task_id, message)
             logger.info(f"Sent {notification_type} notification")
             return True
@@ -112,11 +124,9 @@ class SlackNotifier:
 
         message = f"""🚨 *Urgent Task Alert*
 
-*{task.title}*
+<{task.url}|*{task.title}*>
 Score: {task.score} | {breakdown['urgency_label']}
-Reason: {reason}
-
-🔗 {task.url}"""
+Reason: {reason}"""
 
         await self.send_dm(message, "instant", task.id)
 
@@ -140,9 +150,8 @@ Reason: {reason}
             flags.append(breakdown["urgency_label"])
 
             focus_lines.append(
-                f"{i}. *{task.title}* (Score: {task.score})\n"
-                f"   → {' | '.join(flags)}\n"
-                f"   🔗 {task.url}"
+                f"{i}. <{task.url}|{task.title}> (Score: {task.score})\n"
+                f"   → {' | '.join(flags)}"
             )
 
         # Summary stats
@@ -180,12 +189,12 @@ Type `ivan next` to start working."""
         if new_tasks:
             lines.append("*New tasks assigned:*")
             for task in new_tasks[:5]:
-                lines.append(f"• {task.title}")
+                lines.append(f"• <{task.url}|{task.title}>")
 
         if updated_tasks:
             lines.append("\n*Updates on your tasks:*")
             for task in updated_tasks[:5]:
-                lines.append(f"• {task.title}")
+                lines.append(f"• <{task.url}|{task.title}>")
 
         message = f"""📋 *Hourly Update*
 
@@ -211,10 +220,8 @@ Type `ivan tasks` for full list."""
 
 Ivan is blocked on a task waiting for you:
 
-*{task.title}*
-Reason: {reason}
-
-🔗 {task.url}"""
+<{task.url}|*{task.title}*>
+Reason: {reason}"""
 
         try:
             self.client.chat_postMessage(

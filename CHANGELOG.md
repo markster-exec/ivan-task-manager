@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bidirectional sync (write back to ClickUp/GitHub)
 - HubSpot integration
 
+## [0.4.0] - 2026-01-28
+
+### Added (Phase 4A: Bot Communication Fix)
+- Slack Block Kit formatting for rich, structured messages
+- Thread handling (`thread_ts`) for conversational context
+- `slack_blocks.py` module with Block Kit utilities
+- New tests for bot handlers and Block Kit formatting (13 tests)
+
+### Changed
+- All bot responses now return `dict` with `text` and `blocks`
+- URLs are now clickable Slack links using `<URL|text>` format
+- Hourly digest includes task URLs (was missing)
+- Event handlers pass `thread_ts` to maintain thread context
+- `SlackNotifier.send_dm()` accepts optional `thread_ts` parameter
+
+### Improved
+- Visual hierarchy with headers, dividers, sections
+- Task list formatting with priority emoji indicators
+- Morning briefing layout with clear sections
+
 ## [0.3.0] - 2026-01-27
 
 ### Added (Phase 3: Polish + Error Handling)

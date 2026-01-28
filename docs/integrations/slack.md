@@ -6,7 +6,7 @@ status: active
 owner: ivan
 created: 2026-01-27
 updated: 2026-01-28
-tags: [slack, integration, bot, notifications]
+tags: [slack, integration, bot, notifications, block-kit]
 ---
 
 # Slack Integration
@@ -42,6 +42,24 @@ The Slack bot is fully implemented using Socket Mode for real-time messaging.
 - Instant alerts for high-priority tasks (score >= 1000)
 - Quiet hours support (22:00 - 07:00)
 - Duplicate notification prevention via message hashing
+- **Block Kit formatting** for rich, structured messages
+- **Thread handling** (`thread_ts`) for conversational context
+- **Clickable task links** using Slack mrkdwn `<URL|text>` format
+
+**Message Formatting:**
+
+All bot responses use Slack Block Kit for improved readability:
+- Headers and dividers for visual hierarchy
+- Context blocks for metadata (score, urgency)
+- Section blocks for task details
+- Inline clickable links to task sources
+
+**Thread Support:**
+
+The bot maintains conversation context:
+- Replies in the same thread when responding to thread messages
+- Uses `thread_ts` for DMs and @mentions
+- Enables natural back-and-forth conversation about tasks
 
 **Environment Variables:**
 ```
@@ -143,12 +161,20 @@ curl -X POST https://slack.com/api/chat.postMessage \
 8. [x] Implement notifier.py for scheduled notifications
 9. [x] Test all commands
 
-## Future Enhancements
+## Recent Updates (Phase 4A)
+
+- [x] **Block Kit formatting** - Rich message layout with headers, dividers, sections
+- [x] **Thread handling** - Replies maintain conversation context
+- [x] **Clickable URLs** - All task references are now clickable links
+- [x] **Consistent format** - All handlers return structured responses
+
+## Future Enhancements (Phase 4B+)
 
 - [ ] Bidirectional sync (update tasks via Slack commands)
-- [ ] Thread-based task discussions
-- [ ] Interactive buttons for task actions
+- [ ] Interactive buttons for task actions (Block Kit actions)
 - [ ] Channel-based project updates
+- [ ] File/document input handling
+- [ ] Screenshot processing for context extraction
 
 ## Resources
 

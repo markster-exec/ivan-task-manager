@@ -18,6 +18,7 @@ from .config import get_settings
 from .models import Task, CurrentTask, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
+from . import slack_blocks
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -28,8 +29,12 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-async def handle_next(user_id: str) -> str:
-    """Get the next highest priority task."""
+async def handle_next(user_id: str) -> dict:
+    """Get the next highest priority task.
+
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
     db = SessionLocal()
     try:
         tasks = (
@@ -37,7 +42,7 @@ async def handle_next(user_id: str) -> str:
         )
 
         if not tasks:
-            return "✅ No tasks in queue! Enjoy your free time."
+            return {"text": "✅ No tasks in queue! Enjoy your free time."}
 
         tasks = score_and_sort_tasks(tasks)
         task = tasks[0]
@@ -60,36 +65,37 @@ async def handle_next(user_id: str) -> str:
         flags.append(f"⏰ {breakdown['urgency_label']}")
 
         desc = task.description or "No description"
-        if len(desc) > 200:
-            desc = desc[:200] + "..."
 
-        return f"""🎯 *Focus on this:*
+        text, blocks = slack_blocks.format_next_task(
+            title=task.title,
+            url=task.url,
+            score=task.score,
+            flags=flags,
+            description=desc,
+        )
 
-*{task.title}*
-Score: {task.score} | {' | '.join(flags)}
-
-{desc}
-
-🔗 {task.url}
-
-_Reply "done" when finished, "skip" to move to next._"""
+        return {"text": text, "blocks": blocks}
 
     finally:
         db.close()
 
 
-async def handle_done(user_id: str) -> str:
-    """Mark current task as done."""
+async def handle_done(user_id: str) -> dict:
+    """Mark current task as done.
+
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
     db = SessionLocal()
     try:
         current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
 
         if not current or not current.task_id:
-            return '❓ No current task. Say "next" to get one.'
+            return {"text": '❓ No current task. Say "next" to get one.'}
 
         task = db.query(Task).filter(Task.id == current.task_id).first()
         if not task:
-            return '❓ Current task not found. Say "next" to get a new one.'
+            return {"text": '❓ Current task not found. Say "next" to get a new one.'}
 
         # Mark as done
         task.status = "done"
@@ -97,20 +103,37 @@ async def handle_done(user_id: str) -> str:
         db.commit()
 
         # Get next task
-        return f"✅ Completed: *{completed_title}*\n\n" + await handle_next(user_id)
+        next_response = await handle_next(user_id)
+        completion_text, completion_blocks = slack_blocks.format_completion(
+            completed_title
+        )
+
+        # Combine completion + next task blocks
+        blocks = completion_blocks + [slack_blocks.divider()]
+        if "blocks" in next_response:
+            blocks.extend(next_response["blocks"])
+
+        return {
+            "text": f"{completion_text}\n\n{next_response['text']}",
+            "blocks": blocks,
+        }
 
     finally:
         db.close()
 
 
-async def handle_skip(user_id: str) -> str:
-    """Skip current task and get next one."""
+async def handle_skip(user_id: str) -> dict:
+    """Skip current task and get next one.
+
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
     db = SessionLocal()
     try:
         current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
 
         if not current or not current.task_id:
-            return '❓ No current task to skip. Say "next" to get one.'
+            return {"text": '❓ No current task to skip. Say "next" to get one.'}
 
         skipped = db.query(Task).filter(Task.id == current.task_id).first()
         skipped_title = skipped.title if skipped else "Unknown"
@@ -127,7 +150,12 @@ async def handle_skip(user_id: str) -> str:
         )
 
         if not tasks:
-            return f"⏭️ Skipped: *{skipped_title}*\n\nNo more tasks in queue."
+            skip_text, skip_blocks = slack_blocks.format_skip(skipped_title)
+            skip_blocks.append(slack_blocks.context("No more tasks in queue."))
+            return {
+                "text": f"{skip_text}\n\nNo more tasks in queue.",
+                "blocks": skip_blocks,
+            }
 
         tasks = score_and_sort_tasks(tasks)
         next_task = tasks[0]
@@ -143,21 +171,32 @@ async def handle_skip(user_id: str) -> str:
             flags.append(f"🚫 Blocking: {', '.join(next_task.is_blocking)}")
         flags.append(f"⏰ {breakdown['urgency_label']}")
 
-        return f"""⏭️ Skipped: *{skipped_title}*
+        skip_text, skip_blocks = slack_blocks.format_skip(skipped_title)
+        next_text, next_blocks = slack_blocks.format_next_task(
+            title=next_task.title,
+            url=next_task.url,
+            score=next_task.score,
+            flags=flags,
+            description=next_task.description or "No description",
+        )
 
-🎯 *Next up:*
+        blocks = skip_blocks + [slack_blocks.divider()] + next_blocks
 
-*{next_task.title}*
-Score: {next_task.score} | {' | '.join(flags)}
-
-🔗 {next_task.url}"""
+        return {
+            "text": f"{skip_text}\n\n{next_text}",
+            "blocks": blocks,
+        }
 
     finally:
         db.close()
 
 
-async def handle_tasks(user_id: str) -> str:
-    """Show all tasks sorted by priority."""
+async def handle_tasks(user_id: str) -> dict:
+    """Show all tasks sorted by priority.
+
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
     db = SessionLocal()
     try:
         tasks = (
@@ -165,32 +204,38 @@ async def handle_tasks(user_id: str) -> str:
         )
 
         if not tasks:
-            return "✅ No tasks in queue!"
+            return {"text": "✅ No tasks in queue!"}
 
         tasks = score_and_sort_tasks(tasks)
 
-        lines = ["📋 *Your Tasks* (sorted by priority)\n"]
-        for i, task in enumerate(tasks[:10], 1):
+        # Prepare data for Block Kit formatter
+        tasks_data = []
+        for task in tasks[:10]:
             breakdown = get_score_breakdown(task)
             emoji = "🔴" if task.score >= 1000 else "🟡" if task.score >= 500 else "🟢"
-            lines.append(
-                f"{emoji} {i}. *{task.title}*\n"
-                f"    Score: {task.score} | {breakdown['urgency_label']}\n"
-                f"    🔗 {task.url}"
+            tasks_data.append(
+                {
+                    "title": task.title,
+                    "url": task.url,
+                    "score": task.score,
+                    "urgency_label": breakdown["urgency_label"],
+                    "emoji": emoji,
+                }
             )
 
-        if len(tasks) > 10:
-            lines.append(f"\n_...and {len(tasks) - 10} more tasks_")
-
-        lines.append(f"\n*Total: {len(tasks)} tasks*")
-        return "\n".join(lines)
+        text, blocks = slack_blocks.format_task_list(tasks_data, len(tasks))
+        return {"text": text, "blocks": blocks}
 
     finally:
         db.close()
 
 
-async def handle_morning(user_id: str) -> str:
-    """Get morning briefing."""
+async def handle_morning(user_id: str) -> dict:
+    """Get morning briefing.
+
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
     db = SessionLocal()
     try:
         tasks = (
@@ -198,26 +243,28 @@ async def handle_morning(user_id: str) -> str:
         )
 
         if not tasks:
-            return "☀️ *Good morning!*\n\nNo tasks in queue. Enjoy your day!"
+            return {"text": "☀️ *Good morning!*\n\nNo tasks in queue. Enjoy your day!"}
 
         tasks = score_and_sort_tasks(tasks)
 
-        # Top 3
-        top_3 = tasks[:3]
-        focus_lines = []
-        for i, task in enumerate(top_3, 1):
+        # Prepare focus tasks data
+        focus_tasks = []
+        for task in tasks[:3]:
             breakdown = get_score_breakdown(task)
             flags = []
             if task.is_revenue:
-                flags.append("Revenue")
+                flags.append("💰 Revenue")
             if task.is_blocking:
-                flags.append(f"Blocking: {', '.join(task.is_blocking)}")
-            flags.append(breakdown["urgency_label"])
+                flags.append(f"🚫 Blocking: {', '.join(task.is_blocking)}")
+            flags.append(f"⏰ {breakdown['urgency_label']}")
 
-            focus_lines.append(
-                f"{i}. *{task.title}* (Score: {task.score})\n"
-                f"   → {' | '.join(flags)}\n"
-                f"   🔗 {task.url}"
+            focus_tasks.append(
+                {
+                    "title": task.title,
+                    "url": task.url,
+                    "score": task.score,
+                    "flags": flags,
+                }
             )
 
         # Stats
@@ -231,56 +278,74 @@ async def handle_morning(user_id: str) -> str:
         for t in tasks:
             blocking.update(t.is_blocking or [])
 
-        return f"""☀️ *Good morning, Ivan!*
+        stats = {
+            "total": len(tasks),
+            "overdue": overdue,
+            "due_today": due_today,
+            "blocking_count": len(blocking),
+        }
 
-🔥 *TOP 3 FOCUS*
-{chr(10).join(focus_lines)}
-
-📊 *SUMMARY*
-• {len(tasks)} total tasks
-• {overdue} overdue
-• {due_today} due today
-• {len(blocking)} people waiting on you
-
-Say "next" to start working!"""
+        text, blocks = slack_blocks.format_morning_briefing(focus_tasks, stats)
+        return {"text": text, "blocks": blocks}
 
     finally:
         db.close()
 
 
-async def handle_sync(user_id: str) -> str:
-    """Force sync from all sources."""
+async def handle_sync(user_id: str) -> dict:
+    """Force sync from all sources.
+
+    Returns:
+        dict with 'text' (fallback) and optional 'blocks' (Block Kit)
+    """
     try:
         results = await sync_all_sources()
-        return f"""🔄 *Sync complete!*
-
-• ClickUp: {results.get('clickup', 0)} tasks
-• GitHub: {results.get('github', 0)} tasks
-
-Say "tasks" to see updated list."""
+        text = f"🔄 Sync complete! ClickUp: {results.get('clickup', 0)}, GitHub: {results.get('github', 0)}"
+        blocks = [
+            slack_blocks.section("🔄 *Sync complete!*"),
+            slack_blocks.context(
+                f"• ClickUp: {results.get('clickup', 0)} tasks\n"
+                f"• GitHub: {results.get('github', 0)} tasks"
+            ),
+            slack_blocks.context('Say "tasks" to see updated list.'),
+        ]
+        return {"text": text, "blocks": blocks}
     except Exception as e:
         logger.error(f"Sync failed: {e}")
-        return f"❌ Sync failed: {str(e)}"
+        return {"text": f"❌ Sync failed: {str(e)}"}
 
 
-async def handle_help(user_id: str) -> str:
-    """Show available commands."""
-    return """👋 *Ivan Task Manager*
+async def handle_help(user_id: str) -> dict:
+    """Show available commands.
 
-*Commands:*
-• *next* - Get your highest priority task
-• *done* - Mark current task complete
-• *skip* - Skip to next task
-• *tasks* - Show all your tasks
-• *morning* - Get morning briefing
-• *sync* - Refresh from ClickUp/GitHub
-• *help* - Show this message
-
-You can also ask naturally:
-• "What should I work on?"
-• "I finished the task"
-• "Show me my tasks"
-"""
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
+    text = (
+        "👋 Ivan Task Manager - Commands: next, done, skip, tasks, morning, sync, help"
+    )
+    blocks = [
+        slack_blocks.section("👋 *Ivan Task Manager*"),
+        slack_blocks.divider(),
+        slack_blocks.section(
+            "*Commands:*\n"
+            "• *next* - Get your highest priority task\n"
+            "• *done* - Mark current task complete\n"
+            "• *skip* - Skip to next task\n"
+            "• *tasks* - Show all your tasks\n"
+            "• *morning* - Get morning briefing\n"
+            "• *sync* - Refresh from ClickUp/GitHub\n"
+            "• *help* - Show this message"
+        ),
+        slack_blocks.divider(),
+        slack_blocks.context(
+            "You can also ask naturally:\n"
+            '• "What should I work on?"\n'
+            '• "I finished the task"\n'
+            '• "Show me my tasks"'
+        ),
+    ]
+    return {"text": text, "blocks": blocks}
 
 
 # =============================================================================
@@ -359,8 +424,12 @@ Respond with ONLY the intent name (next, done, skip, tasks, morning, sync, help,
         return None
 
 
-async def route_message(text: str, user_id: str) -> Optional[str]:
-    """Route message to appropriate handler."""
+async def route_message(text: str, user_id: str) -> Optional[dict]:
+    """Route message to appropriate handler.
+
+    Returns:
+        dict with 'text' and optional 'blocks', or None if no match
+    """
     text_lower = text.lower().strip()
 
     # Try regex patterns first (fast path)
@@ -401,17 +470,32 @@ def create_app():
         text = event.get("text", "")
         user_id = event.get("user", "")
 
+        # Get thread_ts to reply in same thread (use thread_ts if in thread, else ts)
+        thread_ts = event.get("thread_ts") or event.get("ts")
+
         logger.info(f"Received DM from {user_id}: {text}")
 
         response = await route_message(text, user_id)
 
         if response:
-            await say(response)
+            # Send with Block Kit if available
+            await say(
+                text=response.get("text", ""),
+                blocks=response.get("blocks"),
+                thread_ts=thread_ts,
+            )
         else:
             # Unknown command - show help
+            help_response = await handle_help(user_id)
             await say(
-                "🤔 I didn't understand that. Here's what I can do:\n\n"
-                + await handle_help(user_id)
+                text="🤔 I didn't understand that. Here's what I can do:",
+                blocks=[
+                    slack_blocks.section(
+                        "🤔 I didn't understand that. Here's what I can do:"
+                    )
+                ]
+                + help_response.get("blocks", []),
+                thread_ts=thread_ts,
             )
 
     @bolt_app.event("app_mention")
@@ -419,6 +503,9 @@ def create_app():
         """Handle @mentions in channels."""
         text = event.get("text", "")
         user_id = event.get("user", "")
+
+        # Get thread_ts to reply in same thread (use thread_ts if in thread, else ts)
+        thread_ts = event.get("thread_ts") or event.get("ts")
 
         # Remove the mention itself
         text = re.sub(r"<@[A-Z0-9]+>", "", text).strip()
@@ -428,9 +515,17 @@ def create_app():
         response = await route_message(text, user_id)
 
         if response:
-            await say(response)
+            # Send with Block Kit if available
+            await say(
+                text=response.get("text", ""),
+                blocks=response.get("blocks"),
+                thread_ts=thread_ts,
+            )
         else:
-            await say('👋 DM me for task management! Say "help" to see commands.')
+            await say(
+                text='👋 DM me for task management! Say "help" to see commands.',
+                thread_ts=thread_ts,
+            )
 
     return bolt_app
 
