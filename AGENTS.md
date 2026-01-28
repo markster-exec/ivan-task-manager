@@ -6,69 +6,61 @@ Repository-specific instructions for ivan-task-manager. Global standards in `~/.
 
 Unified task management system that aggregates tasks from ClickUp and GitHub, provides intelligent prioritization, and delivers actionable notifications via Slack.
 
-**Live:** https://backend-production-7a52.up.railway.app
-**Repo:** https://github.com/markster-exec/ivan-task-manager
+## Quick Reference
 
-## Map
+| Item | Value |
+|------|-------|
+| Live | https://backend-production-7a52.up.railway.app |
+| Repo | https://github.com/markster-exec/ivan-task-manager |
+| Stack | Python 3, FastAPI, SQLAlchemy, PostgreSQL (prod) |
+| State | **Read `STATE.md` for current position** |
+
+## Session Protocol (MANDATORY)
+
+Every session MUST follow this sequence:
+
+### 1. Read STATE.md
+Understand current position before doing anything.
+
+### 2. Brainstorm if new work
+Use `superpowers:brainstorming` skill before implementing anything new.
+
+**Requires brainstorm:**
+- New feature or phase
+- Design decision needed
+- Multiple valid approaches exist
+
+**Skips brainstorm:**
+- Bug fix with obvious cause
+- Continuing work already designed
+- Documentation-only changes
+
+### 3. One logical step
+Complete one discrete unit of work. No sprawling changes.
+
+### 4. Run tests
+```bash
+pytest backend/tests/ -v
+```
+Tests MUST pass before committing. Never push broken code.
+
+### 5. Update STATE.md
+Record what you did and what's next. This is MANDATORY at session end.
+
+### 6. Commit if tests pass
+Ivan is not a dev. If CI passes and no manual/UI testing needed, commit and push.
+
+## Project Structure
 
 | Directory | Purpose |
 |-----------|---------|
 | `backend/app/` | FastAPI application (main.py, bot.py, syncer.py, scorer.py, notifier.py) |
-| `backend/tests/` | pytest test suite (42 tests) |
+| `backend/tests/` | pytest test suite |
 | `cli/ivan/` | CLI client (`ivan next`, `done`, `skip`, etc.) |
 | `docs/` | Documentation with YAML front matter |
 | `docs/plans/` | Product vision, roadmaps, design documents |
 | `docs/templates/` | Templates for creating new phases |
 | `docs/processes/` | Standard processes (how to create phases, etc.) |
-
-## Context Recovery
-
-**BEFORE ANY WORK, read these in order:**
-
-1. **Current roadmap:** `ls -t docs/plans/*-roadmap.md | head -1` (most recent)
-2. **Product vision:** `docs/plans/2026-01-27-product-vision.md`
-3. **GitHub issues:** `gh issue list --repo markster-exec/project-tracker --state open`
-
-**Current Phase:** Phase 4 (as of 2026-01-28)
-- Roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
-- Issues: #1-5 in this repo (`markster-exec/ivan-task-manager`)
-
-**Track progress on GitHub:**
-- Update issue comments when starting/completing work
-- Reference issues in commits: `feat(bot): add links (#1)`
-
-**Creating a new phase:**
-1. Copy `docs/templates/phase-roadmap-template.md`
-2. Create GitHub issues for each sprint
-3. Update "Current Phase" section above
-4. Update "Current Status" section below
-
-## Workflow
-
-**Before starting:** Read Context Recovery section above.
-
-**Before finishing:** Update `CHANGELOG.md`, run tests, ensure CI passes.
-
-## Current Status
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1-3 | **Complete** | Core, Slack bot, error handling, CLI |
-| Phase 4A | **In PR** | Bot communication fix (links, threading) — PR #6 |
-| Phase 4B | Planned | Entity awareness (context for tasks) |
-| Phase 4C | Planned | Bidirectional sync (write to sources) |
-| Phase 4D | Planned | Rich Slack input (files, docs) |
-| Phase 4E | Planned | Image/screenshot processing |
-
-**Active Work:**
-- Branch: `issue-1-bot-communication-fix`
-- PR: https://github.com/markster-exec/ivan-task-manager/pull/6
-- CI: ✅ Passing
-- Status: Ready for review/merge
-
-**Next:** Merge PR #6, then start Phase 4B (Issue #2)
-
-**GitHub Issues:** #1 (4A), #2 (4B), #3 (4C), #4 (4D), #5 (4E) in this repo
 
 ## Commands
 
@@ -88,6 +80,31 @@ black backend/
 # Deploy
 railway up
 ```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `STATE.md` | Current working state (read first every session) |
+| `backend/app/main.py` | FastAPI application + scheduled jobs |
+| `backend/app/bot.py` | Slack bot listener (Socket Mode) |
+| `backend/app/slack_blocks.py` | Slack Block Kit formatting utilities |
+| `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
+| `backend/app/scorer.py` | Task prioritization (Revenue → Blocking → Urgency → Recency) |
+| `backend/app/notifier.py` | Slack notifications (instant, digest, morning) |
+| `backend/app/models.py` | SQLAlchemy models (Task, SyncState, DigestState) |
+
+## Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/tasks` | GET | All tasks sorted by priority |
+| `/next` | GET | Highest priority task |
+| `/done` | POST | Mark current task complete |
+| `/skip` | POST | Skip current task |
+| `/sync` | POST | Force sync from sources |
+| `/morning` | GET | Morning briefing data |
 
 ## Environment Variables
 
@@ -109,43 +126,17 @@ railway up
 - `AZURE_OPENAI_ENDPOINT` - Azure OpenAI for intent classification
 - `AZURE_OPENAI_API_KEY` - Azure OpenAI API key
 
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `backend/app/main.py` | FastAPI application + scheduled jobs |
-| `backend/app/bot.py` | Slack bot listener (Socket Mode) |
-| `backend/app/slack_blocks.py` | Slack Block Kit formatting utilities |
-| `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
-| `backend/app/scorer.py` | Task prioritization (Revenue → Blocking → Urgency → Recency) |
-| `backend/app/notifier.py` | Slack notifications (instant, digest, morning) |
-| `backend/app/models.py` | SQLAlchemy models (Task, SyncState, DigestState) |
-
-## Key Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/tasks` | GET | All tasks sorted by priority |
-| `/next` | GET | Highest priority task |
-| `/done` | POST | Mark current task complete |
-| `/skip` | POST | Skip current task |
-| `/sync` | POST | Force sync from sources |
-| `/morning` | GET | Morning briefing data |
-
 ## Standards
 
-1. Produce production-ready code.
-2. Write tests for every change (skip only for docs/config-only updates and note why).
-3. Run the relevant tests for every change (if no tests exist, state that explicitly).
-4. Document non-obvious logic inline.
-5. Maintain `CHANGELOG.md` with each improvement that changes behavior.
-6. All docs under `docs/` MUST have YAML front matter (id, title, type, status, owner, created, updated, tags).
+1. Follow [Markster Development Standard](https://github.com/markster-exec/project-tracker/blob/main/docs/standards/markster-development-standard.md)
+2. Commit format: `<type>(<scope>): <summary>`
+3. PRs required for main branch
+4. Tests required for behavior changes
+5. Update `CHANGELOG.md` for behavior changes
+6. All docs under `docs/` MUST have YAML front matter
 
-## Stack
+## Creating a New Phase
 
-- Backend: Python 3, FastAPI, SQLAlchemy, Alembic
-- Database: SQLite (dev), PostgreSQL (production on Railway)
-- AI: Azure OpenAI (GPT 5.2) for intent classification
-- Deployment: Docker containers on Railway
-- CI: GitHub Actions (lint, test, build)
+1. Copy `docs/templates/phase-roadmap-template.md`
+2. Create GitHub issues for each sprint
+3. Update `STATE.md` with new phase info
