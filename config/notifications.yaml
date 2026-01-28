@@ -1,0 +1,22 @@
+# Notification Configuration
+# Mode sets defaults when switched. Individual triggers override.
+
+mode: focus  # focus | full | off
+
+# Only notify if task.score >= this (0 = all)
+# NOTE: deadline_warning and overdue ignore threshold (time-sensitive)
+threshold: 500
+
+triggers:
+  deadline_warning: true   # ignores threshold
+  overdue: true            # ignores threshold
+  assigned: true
+  status_critical: true
+  mentioned: true
+  comment_on_owned: false  # off by default (can be noisy)
+  blocker_resolved: true
+
+# Preset modes (for reference):
+# focus: threshold=500, deadline_warning, overdue, mentioned, blocker_resolved ON
+# full: threshold=0, all triggers ON
+# off: all notifications disabled
