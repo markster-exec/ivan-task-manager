@@ -170,3 +170,160 @@ class TestScoreBreakdown:
         breakdown = get_score_breakdown(blocking_task)
         assert breakdown["blocking"] == 1000  # 2 people * 500
         assert breakdown["blocking_count"] == 2
+
+
+# Entity context scoring tests
+
+
+def test_calculate_project_urgency_from_workstream():
+    """Test project urgency from workstream deadline."""
+    from app.scorer import calculate_project_urgency
+    from app.entity_models import Workstream
+
+    # Overdue workstream
+    overdue_ws = Workstream(
+        id="test",
+        name="Test",
+        status="active",
+        deadline=date.today() - timedelta(days=2),
+    )
+    assert calculate_project_urgency(overdue_ws) == 5
+
+    # Due today
+    today_ws = Workstream(
+        id="test",
+        name="Test",
+        status="active",
+        deadline=date.today(),
+    )
+    assert calculate_project_urgency(today_ws) == 4
+
+    # Due this week
+    week_ws = Workstream(
+        id="test",
+        name="Test",
+        status="active",
+        deadline=date.today() + timedelta(days=3),
+    )
+    assert calculate_project_urgency(week_ws) == 3
+
+    # Future
+    future_ws = Workstream(
+        id="test",
+        name="Test",
+        status="active",
+        deadline=date.today() + timedelta(days=30),
+    )
+    assert calculate_project_urgency(future_ws) == 1
+
+
+def test_calculate_project_urgency_no_deadline():
+    """Test project urgency with no deadline."""
+    from app.scorer import calculate_project_urgency
+    from app.entity_models import Workstream
+
+    ws = Workstream(id="test", name="Test", status="active")
+    assert calculate_project_urgency(ws) == 1
+
+
+def test_calculate_project_urgency_none():
+    """Test project urgency with no workstream."""
+    from app.scorer import calculate_project_urgency
+
+    assert calculate_project_urgency(None) == 0
+
+
+def test_calculate_entity_score():
+    """Test entity priority score calculation."""
+    from app.scorer import calculate_entity_score
+    from app.entity_models import Entity
+
+    # Client (priority 4)
+    client = Entity(
+        id="test",
+        type="person",
+        name="Test",
+        created=date.today(),
+        updated=date.today(),
+        relationship_type="client",
+    )
+    assert calculate_entity_score(client) == 4 * 25  # 100
+
+    # With override priority
+    vip = Entity(
+        id="test",
+        type="person",
+        name="Test",
+        created=date.today(),
+        updated=date.today(),
+        relationship_type="client",
+        priority=5,
+    )
+    assert calculate_entity_score(vip) == 5 * 25  # 125
+
+
+def test_calculate_entity_score_none():
+    """Test entity score with no entity."""
+    from app.scorer import calculate_entity_score
+
+    assert calculate_entity_score(None) == 0
+
+
+def test_score_with_entity_context(sample_task):
+    """Test full score calculation with entity context."""
+    from app.scorer import calculate_score, calculate_score_with_context
+    from app.entity_models import Entity, Workstream
+
+    entity = Entity(
+        id="mark",
+        type="person",
+        name="Mark",
+        created=date.today(),
+        updated=date.today(),
+        relationship_type="client",
+        priority=5,
+    )
+    workstream = Workstream(
+        id="workshop",
+        name="Workshop",
+        status="active",
+        deadline=date.today() + timedelta(days=3),  # Due this week
+    )
+
+    # Calculate base score first
+    base_score = calculate_score(sample_task)
+
+    # Score with context should be higher
+    score = calculate_score_with_context(sample_task, entity, workstream)
+
+    # Should include entity and project bonuses
+    # Project urgency 3 * 50 = 150, Entity priority 5 * 25 = 125
+    assert score == base_score + 150 + 125
+
+
+def test_get_score_breakdown_with_context(sample_task):
+    """Test breakdown includes entity context."""
+    from app.scorer import get_score_breakdown_with_context
+    from app.entity_models import Entity, Workstream
+
+    entity = Entity(
+        id="mark",
+        type="person",
+        name="Mark",
+        created=date.today(),
+        updated=date.today(),
+        relationship_type="client",
+    )
+    workstream = Workstream(
+        id="workshop",
+        name="Workshop",
+        status="active",
+        deadline=date.today() + timedelta(days=3),
+    )
+
+    breakdown = get_score_breakdown_with_context(sample_task, entity, workstream)
+
+    assert breakdown["entity_name"] == "Mark"
+    assert breakdown["workstream_name"] == "Workshop"
+    assert breakdown["project_urgency"] == 150  # 3 * 50
+    assert breakdown["entity_priority"] == 100  # 4 * 25

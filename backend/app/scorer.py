@@ -11,9 +11,12 @@ Where:
 """
 
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from .models import Task
+
+if TYPE_CHECKING:
+    from .entity_models import Entity, Workstream
 
 
 def calculate_score(task: Task) -> int:
@@ -109,3 +112,104 @@ def get_score_breakdown(task: Task) -> dict:
         "urgency_label": get_urgency_label(task.due_date),
         "recency": recency_bonus,
     }
+
+
+def calculate_project_urgency(workstream: "Workstream | None") -> int:
+    """Calculate urgency level from workstream deadline.
+
+    Args:
+        workstream: The workstream (may be None)
+
+    Returns:
+        Urgency level 0-5 (0 if no workstream)
+    """
+    if not workstream:
+        return 0
+    return calculate_urgency(workstream.deadline)
+
+
+def calculate_entity_score(entity: "Entity | None") -> int:
+    """Calculate score bonus from entity priority.
+
+    Args:
+        entity: The entity (may be None)
+
+    Returns:
+        Score bonus (priority * 25, max 125)
+    """
+    if not entity:
+        return 0
+    return entity.get_priority() * 25
+
+
+def calculate_score_with_context(
+    task: Task,
+    entity: "Entity | None" = None,
+    workstream: "Workstream | None" = None,
+) -> int:
+    """Calculate full score including entity context.
+
+    Score = (Revenue × 1000)
+          + (Blocking × 500 × count)
+          + (Task Urgency × 100)
+          + (Project Urgency × 50)
+          + (Entity Priority × 25)
+          + Recency
+
+    Args:
+        task: The task to score
+        entity: Optional entity for priority bonus
+        workstream: Optional workstream for project urgency
+
+    Returns:
+        Total score
+    """
+    # Start with base score
+    score = calculate_score(task)
+
+    # Add project urgency (workstream deadline)
+    project_urgency = calculate_project_urgency(workstream)
+    score += project_urgency * 50
+
+    # Add entity priority
+    entity_score = calculate_entity_score(entity)
+    score += entity_score
+
+    return score
+
+
+def get_score_breakdown_with_context(
+    task: Task,
+    entity: "Entity | None" = None,
+    workstream: "Workstream | None" = None,
+) -> dict:
+    """Get detailed breakdown including entity context.
+
+    Args:
+        task: The task
+        entity: Optional entity
+        workstream: Optional workstream
+
+    Returns:
+        Dict with all score components
+    """
+    breakdown = get_score_breakdown(task)
+
+    # Add entity context
+    project_urgency = calculate_project_urgency(workstream)
+    entity_priority = entity.get_priority() if entity else 0
+
+    breakdown.update({
+        "project_urgency": project_urgency * 50,
+        "project_urgency_level": project_urgency,
+        "entity_priority": entity_priority * 25,
+        "entity_priority_level": entity_priority,
+        "entity_name": entity.name if entity else None,
+        "workstream_name": workstream.name if workstream else None,
+        "workstream_deadline": workstream.deadline.isoformat() if workstream and workstream.deadline else None,
+    })
+
+    # Recalculate total
+    breakdown["total"] = calculate_score_with_context(task, entity, workstream)
+
+    return breakdown

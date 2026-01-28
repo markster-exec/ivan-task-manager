@@ -7,6 +7,7 @@ provides intelligent prioritization, and delivers actionable notifications.
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -15,8 +16,15 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .entity_loader import get_entity, get_all_entities, load_entities, find_entity_by_name
+from .entity_mapper import map_task_to_entity
 from .models import Task, CurrentTask, DigestState, init_db, get_db, SessionLocal
-from .scorer import score_and_sort_tasks, get_score_breakdown
+from .scorer import (
+    score_and_sort_tasks,
+    get_score_breakdown,
+    get_score_breakdown_with_context,
+    calculate_score_with_context,
+)
 from .syncer import sync_all_sources
 from .notifier import SlackNotifier
 
@@ -40,6 +48,35 @@ logger = logging.getLogger(__name__)
 # Scheduler for periodic tasks
 scheduler = AsyncIOScheduler()
 notifier = SlackNotifier()
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+
+def enrich_task_with_entity(task: Task) -> tuple[Task, dict]:
+    """Add entity context to task and return enriched breakdown.
+
+    Returns:
+        Tuple of (task with updated score, enriched breakdown dict)
+    """
+    mapping = map_task_to_entity(task)
+    if mapping:
+        entity_id, workstream_id = mapping
+        entity = get_entity(entity_id)
+        workstream = entity.get_workstream(workstream_id) if entity and workstream_id else None
+        if entity and not workstream:
+            workstream = entity.get_active_workstream()
+
+        # Recalculate score with entity context
+        task.score = calculate_score_with_context(task, entity, workstream)
+        breakdown = get_score_breakdown_with_context(task, entity, workstream)
+    else:
+        task.score = task.score or 0
+        breakdown = get_score_breakdown(task)
+
+    return task, breakdown
 
 
 # =============================================================================
@@ -159,6 +196,14 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Ivan Task Manager...")
     init_db()
 
+    # Load entities
+    entities_path = Path(settings.entities_dir)
+    if not entities_path.is_absolute():
+        # Relative to project root (parent of backend/)
+        entities_path = Path(__file__).parent.parent.parent / settings.entities_dir
+    load_entities(entities_path)
+    logger.info(f"Loaded entities from {entities_path}")
+
     # Schedule jobs
     scheduler.add_job(
         scheduled_sync, "interval", minutes=settings.sync_interval_minutes
@@ -243,6 +288,44 @@ class ActionResponse(BaseModel):
     next_task: Optional[TaskResponse]
 
 
+class EntitySummaryResponse(BaseModel):
+    id: str
+    name: str
+    type: str
+    company: Optional[str]
+    relationship_type: Optional[str]
+    priority: int
+    active_workstream: Optional[str]
+
+
+class WorkstreamResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    deadline: Optional[str]
+    milestone: Optional[str]
+    revenue_potential: Optional[str]
+
+
+class EntityDetailResponse(BaseModel):
+    id: str
+    name: str
+    type: str
+    created: str
+    updated: str
+    tags: list[str]
+    company: Optional[str]
+    email: Optional[str]
+    linkedin: Optional[str]
+    phone: Optional[str]
+    relationship_type: Optional[str]
+    priority: int
+    intention: Optional[str]
+    workstreams: list[WorkstreamResponse]
+    channels: dict[str, str]
+    context_summary: Optional[str]
+
+
 # =============================================================================
 # API Routes
 # =============================================================================
@@ -258,7 +341,15 @@ async def health_check():
 async def get_tasks(db: Session = Depends(get_db)):
     """Get all tasks sorted by priority score."""
     tasks = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
-    tasks = score_and_sort_tasks(tasks)
+
+    # Enrich with entity context
+    enriched = []
+    for task in tasks:
+        task, breakdown = enrich_task_with_entity(task)
+        enriched.append((task, breakdown))
+
+    # Sort by enriched score
+    enriched.sort(key=lambda x: x[0].score, reverse=True)
 
     return [
         TaskResponse(
@@ -273,9 +364,9 @@ async def get_tasks(db: Session = Depends(get_db)):
             score=t.score,
             is_revenue=t.is_revenue,
             is_blocking=t.is_blocking,
-            score_breakdown=get_score_breakdown(t),
+            score_breakdown=breakdown,
         )
-        for t in tasks
+        for t, breakdown in enriched
     ]
 
 
@@ -287,8 +378,14 @@ async def get_next_task(db: Session = Depends(get_db)):
     if not tasks:
         return NextTaskResponse(task=None, context=None, message="No tasks in queue!")
 
-    tasks = score_and_sort_tasks(tasks)
-    task = tasks[0]
+    # Enrich with entity context and sort
+    enriched = []
+    for task in tasks:
+        task, breakdown = enrich_task_with_entity(task)
+        enriched.append((task, breakdown))
+    enriched.sort(key=lambda x: x[0].score, reverse=True)
+
+    task, breakdown = enriched[0]
 
     # Update current task tracker
     current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
@@ -300,13 +397,14 @@ async def get_next_task(db: Session = Depends(get_db)):
     db.commit()
 
     # Build context
-    breakdown = get_score_breakdown(task)
     context_parts = []
     if task.is_revenue:
         context_parts.append("Revenue task")
     if task.is_blocking:
         context_parts.append(f"Blocking: {', '.join(task.is_blocking)}")
     context_parts.append(breakdown["urgency_label"])
+    if breakdown.get("entity_name"):
+        context_parts.append(breakdown["entity_name"])
 
     return NextTaskResponse(
         task=TaskResponse(
@@ -359,15 +457,21 @@ async def mark_done(db: Session = Depends(get_db)):
 
     db.commit()
 
-    next_task = None
+    next_task_response = None
     if remaining:
-        remaining = score_and_sort_tasks(remaining)
-        next_task = remaining[0]
+        # Enrich with entity context and sort
+        enriched = []
+        for t in remaining:
+            t, breakdown = enrich_task_with_entity(t)
+            enriched.append((t, breakdown))
+        enriched.sort(key=lambda x: x[0].score, reverse=True)
+
+        next_task, breakdown = enriched[0]
         current.task_id = next_task.id
         current.started_at = datetime.utcnow()
         db.commit()
 
-        next_task = TaskResponse(
+        next_task_response = TaskResponse(
             id=next_task.id,
             source=next_task.source,
             title=next_task.title,
@@ -379,13 +483,13 @@ async def mark_done(db: Session = Depends(get_db)):
             score=next_task.score,
             is_revenue=next_task.is_revenue,
             is_blocking=next_task.is_blocking,
-            score_breakdown=get_score_breakdown(next_task),
+            score_breakdown=breakdown,
         )
 
     return ActionResponse(
         success=True,
         message=f"Completed: {task.title}",
-        next_task=next_task,
+        next_task=next_task_response,
     )
 
 
@@ -413,8 +517,14 @@ async def skip_task(db: Session = Depends(get_db)):
     if not remaining:
         return ActionResponse(success=True, message="No more tasks", next_task=None)
 
-    remaining = score_and_sort_tasks(remaining)
-    next_task = remaining[0]
+    # Enrich with entity context and sort
+    enriched = []
+    for t in remaining:
+        t, breakdown = enrich_task_with_entity(t)
+        enriched.append((t, breakdown))
+    enriched.sort(key=lambda x: x[0].score, reverse=True)
+
+    next_task, breakdown = enriched[0]
 
     current.task_id = next_task.id
     current.started_at = datetime.utcnow()
@@ -435,7 +545,7 @@ async def skip_task(db: Session = Depends(get_db)):
             score=next_task.score,
             is_revenue=next_task.is_revenue,
             is_blocking=next_task.is_blocking,
-            score_breakdown=get_score_breakdown(next_task),
+            score_breakdown=breakdown,
         ),
     )
 
@@ -481,3 +591,76 @@ async def get_morning_briefing(db: Session = Depends(get_db)):
             "blocking": list(blocking),
         },
     }
+
+
+# =============================================================================
+# Entity Routes
+# =============================================================================
+
+
+@app.get("/entities", response_model=list[EntitySummaryResponse])
+async def list_entities():
+    """List all entities with summary info."""
+    entities = get_all_entities()
+    return [
+        EntitySummaryResponse(
+            id=e.id,
+            name=e.name,
+            type=e.type,
+            company=e.company,
+            relationship_type=e.relationship_type,
+            priority=e.get_priority(),
+            active_workstream=e.get_active_workstream().name if e.get_active_workstream() else None,
+        )
+        for e in entities
+    ]
+
+
+@app.get("/entities/{entity_id}", response_model=EntityDetailResponse)
+async def get_entity_detail(entity_id: str):
+    """Get full entity details."""
+    entity = get_entity(entity_id)
+    if not entity:
+        # Try fuzzy match
+        entity = find_entity_by_name(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail=f"Entity '{entity_id}' not found")
+
+    return EntityDetailResponse(
+        id=entity.id,
+        name=entity.name,
+        type=entity.type,
+        created=entity.created.isoformat(),
+        updated=entity.updated.isoformat(),
+        tags=entity.tags,
+        company=entity.company,
+        email=entity.email,
+        linkedin=entity.linkedin,
+        phone=entity.phone,
+        relationship_type=entity.relationship_type,
+        priority=entity.get_priority(),
+        intention=entity.intention,
+        workstreams=[
+            WorkstreamResponse(
+                id=ws.id,
+                name=ws.name,
+                status=ws.status,
+                deadline=ws.deadline.isoformat() if ws.deadline else None,
+                milestone=ws.milestone,
+                revenue_potential=ws.revenue_potential,
+            )
+            for ws in entity.workstreams
+        ],
+        channels=entity.channels,
+        context_summary=entity.context_summary,
+    )
+
+
+@app.post("/entities/reload")
+async def reload_entities():
+    """Reload entities from YAML files."""
+    entities_path = Path(settings.entities_dir)
+    if not entities_path.is_absolute():
+        entities_path = Path(__file__).parent.parent.parent / settings.entities_dir
+    load_entities(entities_path)
+    return {"message": f"Reloaded {len(get_all_entities())} entities"}

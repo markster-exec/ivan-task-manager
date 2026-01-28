@@ -50,6 +50,9 @@ def client():
         skip_task,
         force_sync,
         get_morning_briefing,
+        list_entities,
+        get_entity_detail,
+        reload_entities,
         get_db,
     )
 
@@ -63,6 +66,9 @@ def client():
     test_app.post("/skip")(skip_task)
     test_app.post("/sync")(force_sync)
     test_app.get("/morning")(get_morning_briefing)
+    test_app.get("/entities")(list_entities)
+    test_app.get("/entities/{entity_id}")(get_entity_detail)
+    test_app.post("/entities/reload")(reload_entities)
 
     # Override the database dependency
     test_app.dependency_overrides[get_db] = get_test_db
@@ -177,3 +183,40 @@ class TestMorningBriefing:
         data = response.json()
         assert "top_tasks" in data
         assert "summary" in data
+
+
+class TestEntityEndpoints:
+    """Test /entities endpoints."""
+
+    def test_get_entities(self, client, temp_entities_dir):
+        """Test listing all entities."""
+        from app import entity_loader
+        entity_loader.load_entities(temp_entities_dir)
+
+        response = client.get("/entities")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 1
+        assert data[0]["name"] == "Mark Smith"
+
+    def test_get_entity_by_id(self, client, temp_entities_dir):
+        """Test getting specific entity."""
+        from app import entity_loader
+        entity_loader.load_entities(temp_entities_dir)
+
+        response = client.get("/entities/mark-smith")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Mark Smith"
+        assert data["company"] == "AI Branding Academy"
+
+    def test_get_entity_not_found(self, client):
+        """Test getting non-existent entity."""
+        response = client.get("/entities/nobody")
+        assert response.status_code == 404
+
+    def test_reload_entities(self, client):
+        """Test reloading entities."""
+        response = client.post("/entities/reload")
+        assert response.status_code == 200
+        assert "reloaded" in response.json()["message"].lower()
