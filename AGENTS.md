@@ -14,6 +14,12 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 | Repo | https://github.com/markster-exec/ivan-task-manager |
 | Stack | Python 3, FastAPI, SQLAlchemy, PostgreSQL (prod) |
 | State | **Read `STATE.md` for current position** |
+| Dedicated Account | ivan2@markster.ai |
+
+**IMPORTANT:** This project has a dedicated Claude account (ivan2).
+- Use `STATE.md` in THIS repo for state tracking
+- Do NOT read/write the global `~/Developer/SESSION_STATE.md`
+- That file is for the main coordinator account only
 
 ## Session Protocol (MANDATORY)
 
