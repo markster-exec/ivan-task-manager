@@ -14,7 +14,8 @@ def temp_entities_dir():
         entities_path = Path(tmpdir)
 
         # Mark entity
-        (entities_path / "mark-smith.yaml").write_text("""
+        (entities_path / "mark-smith.yaml").write_text(
+            """
 id: mark-smith
 type: person
 name: Mark Smith
@@ -30,10 +31,12 @@ workstreams:
   - id: setup
     name: System Setup
     status: complete
-""")
+"""
+        )
 
         # Kyle entity
-        (entities_path / "kyle-stearns.yaml").write_text("""
+        (entities_path / "kyle-stearns.yaml").write_text(
+            """
 id: kyle-stearns
 type: person
 name: Kyle Stearns
@@ -45,17 +48,20 @@ workstreams:
   - id: voice-ai
     name: Voice AI
     status: active
-""")
+"""
+        )
 
         # Mappings
-        (entities_path / "mappings.yaml").write_text("""
+        (entities_path / "mappings.yaml").write_text(
+            """
 task_overrides:
   "clickup:override1":
     entity: mark-smith
     workstream: workshop
   "clickup:override2":
     entity: kyle-stearns
-""")
+"""
+        )
 
         yield entities_path
 
@@ -64,6 +70,7 @@ task_overrides:
 def setup_entities(temp_entities_dir):
     """Load entities before tests."""
     from app.entity_loader import load_entities
+
     load_entities(temp_entities_dir)
 
 

@@ -100,7 +100,8 @@ def temp_entities_dir():
     with tempfile.TemporaryDirectory() as tmpdir:
         entities_path = Path(tmpdir)
 
-        (entities_path / "mark-smith.yaml").write_text("""
+        (entities_path / "mark-smith.yaml").write_text(
+            """
 id: mark-smith
 type: person
 name: Mark Smith
@@ -115,6 +116,7 @@ workstreams:
     deadline: 2026-02-15
 channels:
   gdoc: "1byTVc..."
-""")
+"""
+        )
 
         yield entities_path

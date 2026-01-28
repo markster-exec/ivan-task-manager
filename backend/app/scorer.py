@@ -199,15 +199,21 @@ def get_score_breakdown_with_context(
     project_urgency = calculate_project_urgency(workstream)
     entity_priority = entity.get_priority() if entity else 0
 
-    breakdown.update({
-        "project_urgency": project_urgency * 50,
-        "project_urgency_level": project_urgency,
-        "entity_priority": entity_priority * 25,
-        "entity_priority_level": entity_priority,
-        "entity_name": entity.name if entity else None,
-        "workstream_name": workstream.name if workstream else None,
-        "workstream_deadline": workstream.deadline.isoformat() if workstream and workstream.deadline else None,
-    })
+    breakdown.update(
+        {
+            "project_urgency": project_urgency * 50,
+            "project_urgency_level": project_urgency,
+            "entity_priority": entity_priority * 25,
+            "entity_priority_level": entity_priority,
+            "entity_name": entity.name if entity else None,
+            "workstream_name": workstream.name if workstream else None,
+            "workstream_deadline": (
+                workstream.deadline.isoformat()
+                if workstream and workstream.deadline
+                else None
+            ),
+        }
+    )
 
     # Recalculate total
     breakdown["total"] = calculate_score_with_context(task, entity, workstream)

@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Pattern for [CLIENT:entity] or [CLIENT:entity:workstream] in titles
 CLIENT_TAG_PATTERN = re.compile(
-    r"\[CLIENT:([a-z0-9-]+)(?::([a-z0-9-]+))?\]",
-    re.IGNORECASE
+    r"\[CLIENT:([a-z0-9-]+)(?::([a-z0-9-]+))?\]", re.IGNORECASE
 )
 
 
@@ -34,7 +33,9 @@ def parse_client_tag(title: str) -> Optional[tuple[str, Optional[str]]]:
     return None
 
 
-def parse_clickup_tags(source_data: Optional[dict]) -> Optional[tuple[str, Optional[str]]]:
+def parse_clickup_tags(
+    source_data: Optional[dict],
+) -> Optional[tuple[str, Optional[str]]]:
     """Parse client:entity:workstream from ClickUp tags.
 
     Args:
@@ -78,7 +79,9 @@ def resolve_workstream(entity_id: str, workstream_id: Optional[str]) -> Optional
         # Verify workstream exists
         if entity.get_workstream(workstream_id):
             return workstream_id
-        logger.warning(f"Workstream '{workstream_id}' not found for entity '{entity_id}'")
+        logger.warning(
+            f"Workstream '{workstream_id}' not found for entity '{entity_id}'"
+        )
         # Fall through to default
 
     # Default to first active workstream

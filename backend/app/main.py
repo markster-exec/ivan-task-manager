@@ -16,7 +16,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .entity_loader import get_entity, get_all_entities, load_entities, find_entity_by_name
+from .entity_loader import (
+    get_entity,
+    get_all_entities,
+    load_entities,
+    find_entity_by_name,
+)
 from .entity_mapper import map_task_to_entity
 from .models import Task, CurrentTask, DigestState, init_db, get_db, SessionLocal
 from .scorer import (
@@ -65,7 +70,9 @@ def enrich_task_with_entity(task: Task) -> tuple[Task, dict]:
     if mapping:
         entity_id, workstream_id = mapping
         entity = get_entity(entity_id)
-        workstream = entity.get_workstream(workstream_id) if entity and workstream_id else None
+        workstream = (
+            entity.get_workstream(workstream_id) if entity and workstream_id else None
+        )
         if entity and not workstream:
             workstream = entity.get_active_workstream()
 
@@ -610,7 +617,9 @@ async def list_entities():
             company=e.company,
             relationship_type=e.relationship_type,
             priority=e.get_priority(),
-            active_workstream=e.get_active_workstream().name if e.get_active_workstream() else None,
+            active_workstream=(
+                e.get_active_workstream().name if e.get_active_workstream() else None
+            ),
         )
         for e in entities
     ]

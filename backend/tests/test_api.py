@@ -191,6 +191,7 @@ class TestEntityEndpoints:
     def test_get_entities(self, client, temp_entities_dir):
         """Test listing all entities."""
         from app import entity_loader
+
         entity_loader.load_entities(temp_entities_dir)
 
         response = client.get("/entities")
@@ -202,6 +203,7 @@ class TestEntityEndpoints:
     def test_get_entity_by_id(self, client, temp_entities_dir):
         """Test getting specific entity."""
         from app import entity_loader
+
         entity_loader.load_entities(temp_entities_dir)
 
         response = client.get("/entities/mark-smith")

@@ -47,9 +47,7 @@ def test_entity_model():
         email="mark@example.com",
         relationship_type="client",
         intention="Showcase client",
-        workstreams=[
-            Workstream(id="workshop", name="Workshop", status="active")
-        ],
+        workstreams=[Workstream(id="workshop", name="Workshop", status="active")],
         channels={"gdoc": "1byTVc..."},
         context_summary="Building AI Branding Academy.",
     )

@@ -371,7 +371,11 @@ async def handle_entity(user_id: str, entity_name: str) -> dict:
 
     # Priority stars
     priority_stars = "*" * entity.get_priority()
-    blocks.append(slack_blocks.context(f"Priority: {priority_stars} ({entity.relationship_type or 'unset'})"))
+    blocks.append(
+        slack_blocks.context(
+            f"Priority: {priority_stars} ({entity.relationship_type or 'unset'})"
+        )
+    )
 
     # Active workstream
     active_ws = entity.get_active_workstream()
@@ -414,7 +418,9 @@ async def handle_projects(user_id: str) -> dict:
         ws = entity.get_active_workstream()
         deadline = f" — due {ws.deadline}" if ws.deadline else ""
         blocks.append(
-            slack_blocks.section(f"*{entity.name}* ({entity.company or 'N/A'})\n-> {ws.name}{deadline}")
+            slack_blocks.section(
+                f"*{entity.name}* ({entity.company or 'N/A'})\n-> {ws.name}{deadline}"
+            )
         )
 
     return {"text": text, "blocks": blocks}
@@ -507,7 +513,9 @@ async def route_message(text: str, user_id: str) -> Optional[dict]:
     text_lower = text.lower().strip()
 
     # Check for entity query first
-    entity_match = re.search(r"(?:entity|what'?s happening with|status of)\s+(\w+)", text_lower)
+    entity_match = re.search(
+        r"(?:entity|what'?s happening with|status of)\s+(\w+)", text_lower
+    )
     if entity_match:
         return await handle_entity(user_id, entity_match.group(1))
 
