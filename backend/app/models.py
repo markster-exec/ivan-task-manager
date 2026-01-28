@@ -51,6 +51,9 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Notification tracking (event-driven notifications)
+    notification_state = Column(JSON, default=dict)
+
     @property
     def is_blocking(self) -> list[str]:
         return self.is_blocking_json or []

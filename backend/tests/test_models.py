@@ -1,0 +1,41 @@
+"""Tests for models."""
+
+from app.models import Task
+
+
+class TestTaskNotificationState:
+    """Tests for Task.notification_state column."""
+
+    def test_notification_state_defaults_to_empty_dict(self, db_session):
+        """New task should have empty notification_state after persistence."""
+        task = Task(
+            id="test:1",
+            source="test",
+            title="Test Task",
+            status="todo",
+            url="http://example.com",
+        )
+        db_session.add(task)
+        db_session.commit()
+        db_session.refresh(task)
+        assert task.notification_state == {}
+
+    def test_notification_state_can_store_dict(self, db_session):
+        """notification_state should store and retrieve dict."""
+        task = Task(
+            id="test:2",
+            source="test",
+            title="Test Task",
+            status="todo",
+            url="http://example.com",
+        )
+        task.notification_state = {
+            "prev_status": "todo",
+            "prev_assignee": "ivan",
+            "dedupe_keys": ["key1", "key2"],
+        }
+        db_session.add(task)
+        db_session.commit()
+        db_session.refresh(task)
+        assert task.notification_state["prev_status"] == "todo"
+        assert task.notification_state["dedupe_keys"] == ["key1", "key2"]
