@@ -55,6 +55,12 @@ class TestNotificationConfig:
         config.triggers["comment_on_owned"] = False
         assert config.should_notify("comment_on_owned", task_score=1000) is False
 
+    def test_threshold_exact_match(self):
+        """Task score exactly matching threshold should notify."""
+        config = NotificationConfig()
+        config.threshold = 500
+        assert config.should_notify("assigned", task_score=500) is True
+
 
 class TestLoadConfig:
     """Tests for config file loading."""
@@ -81,3 +87,23 @@ triggers:
         assert config.mode == "full"
         assert config.threshold == 0
         assert config.triggers["comment_on_owned"] is True
+
+    def test_invalid_trigger_name_ignored(self, tmp_path):
+        """Invalid trigger names in config should be ignored."""
+        config_path = tmp_path / "notifications.yaml"
+        config_path.write_text(
+            """
+triggers:
+  deadline_warning: true
+  fake_trigger: true
+"""
+        )
+        config = load_notification_config(config_path)
+        assert "fake_trigger" not in config.triggers
+
+    def test_malformed_yaml_returns_defaults(self, tmp_path):
+        """Malformed YAML should return defaults and not crash."""
+        config_path = tmp_path / "notifications.yaml"
+        config_path.write_text("mode: [invalid yaml structure")
+        config = load_notification_config(config_path)
+        assert config.mode == "focus"  # Should get defaults
