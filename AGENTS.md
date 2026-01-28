@@ -44,8 +44,13 @@ Every session MUST follow this sequence:
 **Required for:** New features, new phases, architecture decisions, entity work.
 **Skip for:** Bug fixes, documentation, continuing existing design.
 
-### 1. Read STATE.md
-Understand current position before doing anything.
+### 1. Read State + Task Queue
+```
+STATE.md                  # Current position
+docs/tasks/QUEUE.md       # Pending tasks from main account
+```
+
+**IMPORTANT:** Main account (ivan) adds tasks to `docs/tasks/QUEUE.md`. Check this file every session for new work. If PENDING tasks exist, work on them in priority order.
 
 ### 2. Brainstorm if new work
 Use `superpowers:brainstorming` skill before implementing anything new.
