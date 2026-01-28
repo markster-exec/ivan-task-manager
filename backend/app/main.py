@@ -134,7 +134,7 @@ async def scheduled_sync():
             if not notified:
                 update_prev_state_only(task)
 
-        db.commit()
+            db.commit()  # Commit after each task for atomicity
     finally:
         db.close()
 
