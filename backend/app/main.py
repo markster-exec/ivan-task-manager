@@ -296,6 +296,7 @@ class ActionResponse(BaseModel):
     success: bool
     message: str
     next_task: Optional[TaskResponse]
+    completed_task_id: Optional[str] = None
 
 
 class EntitySummaryResponse(BaseModel):
@@ -466,11 +467,17 @@ async def mark_done(db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="Current task not found")
 
-    # Mark as done
+    # Save the completed task id before getting next task
+    completed_task_id = task.id
+
+    # Update in source system (ClickUp/GitHub)
+    source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+    writer = get_writer(task.source)
+    await writer.complete(source_id)
+
+    # Mark as done locally
     task.status = "done"
     task.updated_at = datetime.utcnow()
-
-    # TODO: Update in source system (ClickUp/GitHub)
 
     # Get next task
     remaining = (
@@ -518,6 +525,7 @@ async def mark_done(db: Session = Depends(get_db)):
         success=True,
         message=f"Completed: {task.title}",
         next_task=next_task_response,
+        completed_task_id=completed_task_id,
     )
 
 

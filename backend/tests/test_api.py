@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import Base, Task
+from app.models import Base, Task, CurrentTask
 from app.writers.base import WriteResult
 
 
@@ -159,6 +159,43 @@ class TestDoneEndpoint:
         """No current task returns error."""
         response = client.post("/done")
         assert response.status_code == 400
+
+    def test_done_calls_writer_and_returns_completed_id(self, client):
+        """Done endpoint calls writer and returns completed_task_id."""
+        # Add a task and set it as current
+        db = TestSessionLocal()
+        task = Task(
+            id="clickup:task123",
+            source="clickup",
+            title="Current Task",
+            status="todo",
+            assignee="ivan",
+            url="http://clickup.com/task123",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        current = CurrentTask(user_id="ivan", task_id="clickup:task123")
+        db.add(task)
+        db.add(current)
+        db.commit()
+        db.close()
+
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.complete.return_value = WriteResult(
+                success=True, message="Task completed"
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post("/done")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["completed_task_id"] == "clickup:task123"
+            assert "Completed" in data["message"]
+
+            # Verify writer was called with correct source_id
+            mock_writer.complete.assert_called_once_with("task123")
 
 
 class TestSkipEndpoint:
