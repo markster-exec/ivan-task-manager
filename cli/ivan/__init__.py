@@ -362,5 +362,121 @@ def blocked():
     console.print("[dim]Coming soon: Show tasks you're blocked on[/dim]")
 
 
+@cli.command()
+@click.argument("name")
+def entity(name: str):
+    """Show entity details and tasks."""
+    data = api_get(f"/entities/{name}")
+
+    console.print()
+    console.print(f"[bold]{data['name']}[/bold] — {data.get('company') or 'N/A'}")
+    if data.get("email"):
+        console.print(f"  Email: {data['email']}")
+    if data.get("phone"):
+        console.print(f"  Phone: {data['phone']}")
+    console.print(f"  Type: {data.get('relationship_type') or 'N/A'} | Priority: {data['priority']}")
+    console.print()
+
+    if data.get("intention"):
+        console.print(f"[bold]Intention:[/bold] {data['intention']}")
+        console.print()
+
+    # Workstreams
+    if data.get("workstreams"):
+        console.print("[bold]Workstreams:[/bold]")
+        for ws in data["workstreams"]:
+            status_color = {
+                "active": "green",
+                "blocked": "red",
+                "planned": "yellow",
+                "complete": "dim",
+            }.get(ws["status"], "white")
+            deadline = f" — due {ws['deadline']}" if ws.get("deadline") else ""
+            revenue = f" ({ws['revenue_potential']})" if ws.get("revenue_potential") else ""
+            console.print(f"  [{status_color}][{ws['status']}][/{status_color}] {ws['name']}{deadline}{revenue}")
+        console.print()
+
+    # Channels
+    if data.get("channels"):
+        console.print("[bold]Where to work:[/bold]")
+        for key, value in data["channels"].items():
+            # Format URLs nicely
+            if key == "gdoc":
+                url = f"https://docs.google.com/document/d/{value}"
+            elif key == "github" and not value.startswith("http"):
+                url = f"https://github.com/{value}"
+            else:
+                url = value
+            console.print(f"  {key.capitalize()}: [cyan]{url}[/cyan]")
+        console.print()
+
+    # Context
+    if data.get("context_summary"):
+        console.print("[bold]Context:[/bold]")
+        console.print(f"  {data['context_summary'].strip()}")
+
+
+@cli.command()
+def projects():
+    """Show all entities grouped by workstream status."""
+    data = api_get("/entities")
+
+    if not data:
+        console.print("[dim]No entities found.[/dim]")
+        return
+
+    console.print()
+    console.print("[bold]ACTIVE WORKSTREAMS[/bold]")
+    console.print()
+
+    active_found = False
+    for entity in sorted(data, key=lambda e: -e["priority"]):
+        if entity.get("active_workstream"):
+            active_found = True
+            console.print(f"[bold]{entity['name']}[/bold] ({entity.get('company') or 'N/A'})")
+            console.print(f"  → {entity['active_workstream']}")
+            console.print()
+
+    if not active_found:
+        console.print("[dim]No active workstreams[/dim]")
+        console.print()
+
+
+@cli.command()
+@click.argument("task_number", type=int, required=False)
+def context(task_number: int = None):
+    """Show entity context for current or specified task."""
+    if task_number:
+        # Get task by number from list
+        tasks = api_get("/tasks")
+        if task_number > len(tasks) or task_number < 1:
+            console.print(f"[red]Task #{task_number} not found[/red]")
+            return
+        task = tasks[task_number - 1]
+    else:
+        # Get current task
+        data = api_get("/next")
+        if not data.get("task"):
+            console.print("[dim]No current task.[/dim]")
+            return
+        task = data["task"]
+
+    console.print()
+    console.print(f"[bold]{task['title']}[/bold]")
+    console.print(f"[cyan]{task['url']}[/cyan]")
+    console.print()
+
+    # Entity context from score breakdown
+    breakdown = task.get("score_breakdown", {})
+    if breakdown.get("entity_name"):
+        console.print(f"[bold]Entity:[/bold] {breakdown['entity_name']}")
+        if breakdown.get("workstream_name"):
+            deadline = f" — due {breakdown['workstream_deadline']}" if breakdown.get("workstream_deadline") else ""
+            console.print(f"[bold]Workstream:[/bold] {breakdown['workstream_name']}{deadline}")
+        console.print()
+    else:
+        console.print("[dim]No entity context for this task.[/dim]")
+
+
 if __name__ == "__main__":
     cli()
