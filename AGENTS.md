@@ -1,25 +1,29 @@
 # AGENTS
 
-These instructions define the baseline expectations for Codex agents working in this repo.
+Repository-specific instructions for ivan-task-manager. Global standards in `~/.codex/AGENTS.md`.
 
-## Required Reading (BEFORE ANY WORK)
+## Mission
 
-**STOP. Before doing any development work, you MUST read:**
+Unified task management system that aggregates tasks from ClickUp and GitHub, provides intelligent prioritization, and delivers actionable notifications via Slack.
 
-1. **`docs/plans/2026-01-27-product-vision.md`** — The product vision and blueprint
+**Live:** https://backend-production-7a52.up.railway.app
+**Repo:** https://github.com/markster-exec/ivan-task-manager
 
-This document explains:
-- What we're building (AI Chief of Staff for a CEO with multiple companies)
-- The 4-layer architecture (Capture → Context → Prioritization → Execution)
-- Entity-centric design (entities have intentions, workstreams, deadlines)
-- Implementation phases and what's already complete
-- How this repo fits into the larger agent-system vision
+## Map
 
-**Any development work must align with this vision.** Do not add features or make architectural decisions without understanding the full picture.
+| Directory | Purpose |
+|-----------|---------|
+| `backend/app/` | FastAPI application (main.py, bot.py, syncer.py, scorer.py, notifier.py) |
+| `backend/tests/` | pytest test suite (29 tests) |
+| `cli/ivan/` | CLI client (`ivan next`, `done`, `skip`, etc.) |
+| `docs/` | Documentation with YAML front matter |
+| `docs/plans/` | Product vision and design documents |
 
-If the vision document doesn't exist or has been superseded, check for newer files in `docs/plans/` sorted by date.
+## Workflow
 
----
+**Before starting:** Read `docs/plans/2026-01-27-product-vision.md` — the 4-layer architecture and entity-centric design.
+
+**Before finishing:** Update `CHANGELOG.md`, run tests, ensure CI passes.
 
 ## Current Status
 
@@ -32,52 +36,13 @@ If the vision document doesn't exist or has been superseded, check for newer fil
 
 **Next priority:** Entity awareness (task-entity mapping, project deadlines)
 
----
-
-## Standards
-
-1. Produce production-ready code.
-2. Write tests for every change (skip only for docs/config-only updates and note why).
-3. Run the relevant tests for every change (if no tests exist, state that explicitly).
-4. Document non-obvious logic inline.
-5. For larger features (new commands, workflows, or multi-file behavior changes), add documentation in `docs/` as markdown.
-6. Maintain `CHANGELOG.md` with each improvement that changes behavior or user-facing output.
-7. Use the standard commit message format described below.
-8. For user interfaces (including CLI UX), add user-facing documentation describing each feature.
-9. The dev-docs MCP tool must be used to look up relevant API/documentation when applicable; use list_metadata to review available datasets, search to locate material, and get_chunk to retrieve the exact passages.
-
-## Commit Message Format
-
-Use `<type>(<scope>): <summary>` where:
-- `type` is one of: feat, fix, docs, test, chore, refactor, perf, ci
-- `scope` is optional and should be a short noun
-- `summary` is a short, imperative description
-
-## Project-Specific Instructions
-
-### Stack
-- Backend: Python 3, FastAPI, SQLAlchemy, Alembic
-- Database: SQLite (dev), PostgreSQL (production on Railway)
-- AI: Azure OpenAI (GPT 5.2) — endpoint at `https://ai-devteam-resource.cognitiveservices.azure.com`
-- Deployment: Docker containers on Railway
-
-### Key Files
-
-| File | Purpose |
-|------|---------|
-| `docs/plans/2026-01-27-product-vision.md` | **Product vision (read first!)** |
-| `backend/app/main.py` | FastAPI application + scheduled jobs |
-| `backend/app/bot.py` | Slack bot listener (Socket Mode) |
-| `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
-| `backend/app/scorer.py` | Task prioritization logic |
-| `backend/app/notifier.py` | Slack notifications |
-| `backend/app/models.py` | SQLAlchemy models |
-| `cli/ivan/__init__.py` | CLI client |
-
-### Testing
+## Commands
 
 ```bash
-# Run tests (29 passing)
+# Development
+docker-compose up
+
+# Test
 pytest backend/tests/ -v
 
 # Lint
@@ -85,14 +50,67 @@ ruff check backend/
 
 # Format
 black backend/
+
+# Deploy
+railway up
 ```
 
-### Environment Variables
+## Environment Variables
 
-See `.env.example` for required configuration.
+**Required:**
+- `CLICKUP_API_TOKEN` - ClickUp API token
+- `CLICKUP_LIST_ID` - ClickUp list to sync (default: 901215490741)
+- `GITHUB_TOKEN` - GitHub personal access token
+- `GITHUB_REPO` - GitHub repo (owner/name)
+- `SLACK_BOT_TOKEN` - Slack bot token (xoxb-...)
+- `SLACK_APP_TOKEN` - Slack app token for Socket Mode (xapp-...)
+- `SLACK_IVAN_USER_ID` - Slack user ID for DMs
 
-### Deployment
+**Optional:**
+- `DATABASE_URL` - Database connection string (default: sqlite:///./tasks.db)
+- `SYNC_INTERVAL_MINUTES` - Sync frequency (default: 60)
+- `MORNING_BRIEFING_TIME` - Daily briefing time (default: 07:00)
+- `QUIET_HOURS_START` - Notification quiet start (default: 22:00)
+- `QUIET_HOURS_END` - Notification quiet end (default: 07:00)
+- `AZURE_OPENAI_ENDPOINT` - Azure OpenAI for intent classification
+- `AZURE_OPENAI_API_KEY` - Azure OpenAI API key
 
-- **Production URL:** https://backend-production-7a52.up.railway.app
-- **CI:** GitHub Actions (lint, test, build)
-- All changes must pass CI before merge.
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `backend/app/main.py` | FastAPI application + scheduled jobs |
+| `backend/app/bot.py` | Slack bot listener (Socket Mode) |
+| `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
+| `backend/app/scorer.py` | Task prioritization (Revenue → Blocking → Urgency → Recency) |
+| `backend/app/notifier.py` | Slack notifications (instant, digest, morning) |
+| `backend/app/models.py` | SQLAlchemy models (Task, SyncState, DigestState) |
+
+## Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/tasks` | GET | All tasks sorted by priority |
+| `/next` | GET | Highest priority task |
+| `/done` | POST | Mark current task complete |
+| `/skip` | POST | Skip current task |
+| `/sync` | POST | Force sync from sources |
+| `/morning` | GET | Morning briefing data |
+
+## Standards
+
+1. Produce production-ready code.
+2. Write tests for every change (skip only for docs/config-only updates and note why).
+3. Run the relevant tests for every change (if no tests exist, state that explicitly).
+4. Document non-obvious logic inline.
+5. Maintain `CHANGELOG.md` with each improvement that changes behavior.
+6. All docs under `docs/` MUST have YAML front matter (id, title, type, status, owner, created, updated, tags).
+
+## Stack
+
+- Backend: Python 3, FastAPI, SQLAlchemy, Alembic
+- Database: SQLite (dev), PostgreSQL (production on Railway)
+- AI: Azure OpenAI (GPT 5.2) for intent classification
+- Deployment: Docker containers on Railway
+- CI: GitHub Actions (lint, test, build)
