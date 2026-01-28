@@ -56,7 +56,18 @@ class Entity(BaseModel):
     }
 
     def get_priority(self) -> int:
-        """Return priority, defaulting from relationship_type."""
+        """Return priority, defaulting from relationship_type.
+
+        Priority defaults:
+            - team: 5
+            - client: 4
+            - investor: 4
+            - prospect: 3
+            - partner: 3
+            - vendor: 1
+            - network: 1
+            - other/unset: 2
+        """
         if self.priority is not None:
             return self.priority
         return self._RELATIONSHIP_DEFAULTS.get(self.relationship_type, 2)

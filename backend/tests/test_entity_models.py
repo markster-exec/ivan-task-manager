@@ -139,3 +139,54 @@ def test_entity_get_active_workstream_none():
     )
 
     assert entity.get_active_workstream() is None
+
+
+def test_entity_get_workstream():
+    """Test getting workstream by ID."""
+    from app.entity_models import Entity, Workstream
+
+    entity = Entity(
+        id="test",
+        type="person",
+        name="Test",
+        created=date(2026, 1, 28),
+        updated=date(2026, 1, 28),
+        workstreams=[
+            Workstream(id="ws1", name="Workstream 1", status="active"),
+            Workstream(id="ws2", name="Workstream 2", status="planned"),
+        ],
+    )
+
+    ws = entity.get_workstream("ws2")
+    assert ws is not None
+    assert ws.id == "ws2"
+
+
+def test_entity_get_workstream_not_found():
+    """Test getting non-existent workstream."""
+    from app.entity_models import Entity
+
+    entity = Entity(
+        id="test",
+        type="person",
+        name="Test",
+        created=date(2026, 1, 28),
+        updated=date(2026, 1, 28),
+    )
+
+    assert entity.get_workstream("nonexistent") is None
+
+
+def test_entity_get_priority_no_relationship():
+    """Test priority when relationship_type is None."""
+    from app.entity_models import Entity
+
+    entity = Entity(
+        id="test",
+        type="person",
+        name="Test",
+        created=date(2026, 1, 28),
+        updated=date(2026, 1, 28),
+    )
+    # Should return default of 2 when no relationship_type
+    assert entity.get_priority() == 2
