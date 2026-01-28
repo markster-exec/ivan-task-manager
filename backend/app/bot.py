@@ -19,6 +19,7 @@ from .models import Task, CurrentTask, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
 from .entity_loader import find_entity_by_name, get_all_entities
+from .writers import get_writer
 from . import slack_blocks
 
 settings = get_settings()
@@ -82,7 +83,7 @@ async def handle_next(user_id: str) -> dict:
 
 
 async def handle_done(user_id: str) -> dict:
-    """Mark current task as done.
+    """Mark current task as done in source system.
 
     Returns:
         dict with 'text' (fallback) and 'blocks' (Block Kit)
@@ -98,16 +99,32 @@ async def handle_done(user_id: str) -> dict:
         if not task:
             return {"text": '❓ Current task not found. Say "next" to get a new one.'}
 
-        # Mark as done
-        task.status = "done"
         completed_title = task.title
+        completed_url = task.url
+
+        # Write to source system (ClickUp/GitHub)
+        source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+        writer = get_writer(task.source)
+        result = await writer.complete(source_id)
+
+        if not result.success:
+            return {"text": f"❌ Failed to complete in {task.source}: {result.message}"}
+
+        # Mark as done locally
+        task.status = "done"
         db.commit()
 
         # Get next task
         next_response = await handle_next(user_id)
         completion_text, completion_blocks = slack_blocks.format_completion(
-            completed_title
+            completed_title, completed_url
         )
+
+        # Add conflict note if task was already done externally
+        if result.conflict:
+            completion_blocks.append(
+                slack_blocks.context(f"ℹ️ Task was already completed in {task.source}")
+            )
 
         # Combine completion + next task blocks
         blocks = completion_blocks + [slack_blocks.divider()]
@@ -118,6 +135,45 @@ async def handle_done(user_id: str) -> dict:
             "text": f"{completion_text}\n\n{next_response['text']}",
             "blocks": blocks,
         }
+
+    finally:
+        db.close()
+
+
+async def handle_comment(user_id: str, comment_text: str) -> dict:
+    """Add comment to current task in source system.
+
+    Returns:
+        dict with 'text' (fallback) and 'blocks' (Block Kit)
+    """
+    db = SessionLocal()
+    try:
+        current = db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
+
+        if not current or not current.task_id:
+            return {"text": '❓ No current task. Say "next" to get one first.'}
+
+        task = db.query(Task).filter(Task.id == current.task_id).first()
+        if not task:
+            return {"text": '❓ Current task not found. Say "next" to get a new one.'}
+
+        # Write comment to source system (ClickUp/GitHub)
+        source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+        writer = get_writer(task.source)
+        result = await writer.comment(source_id, comment_text)
+
+        if not result.success:
+            return {
+                "text": f"❌ Failed to add comment to {task.source}: {result.message}"
+            }
+
+        text = f"💬 Comment added to *{task.title}*"
+        blocks = [
+            slack_blocks.section(f"💬 Comment added to <{task.url}|{task.title}>"),
+            slack_blocks.context(f'"{comment_text}"'),
+        ]
+
+        return {"text": text, "blocks": blocks}
 
     finally:
         db.close()
@@ -322,9 +378,7 @@ async def handle_help(user_id: str) -> dict:
     Returns:
         dict with 'text' (fallback) and 'blocks' (Block Kit)
     """
-    text = (
-        "👋 Ivan Task Manager - Commands: next, done, skip, tasks, morning, sync, help"
-    )
+    text = "👋 Ivan Task Manager - Commands: next, done, skip, comment, tasks, morning, sync, help"
     blocks = [
         slack_blocks.section("👋 *Ivan Task Manager*"),
         slack_blocks.divider(),
@@ -333,6 +387,7 @@ async def handle_help(user_id: str) -> dict:
             "• *next* - Get your highest priority task\n"
             "• *done* - Mark current task complete\n"
             "• *skip* - Skip to next task\n"
+            "• *comment <text>* - Add comment to current task\n"
             "• *tasks* - Show all your tasks\n"
             "• *morning* - Get morning briefing\n"
             "• *sync* - Refresh from ClickUp/GitHub\n"
@@ -518,6 +573,12 @@ async def route_message(text: str, user_id: str) -> Optional[dict]:
     )
     if entity_match:
         return await handle_entity(user_id, entity_match.group(1))
+
+    # Check for comment command (special: takes argument)
+    comment_match = re.match(r"comment\s+(.+)", text.strip(), re.IGNORECASE)
+    if comment_match:
+        comment_text = comment_match.group(1).strip()
+        return await handle_comment(user_id, comment_text)
 
     # Try regex patterns (fast path)
     for pattern, handler in COMMAND_PATTERNS:

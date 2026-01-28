@@ -202,14 +202,23 @@ def format_morning_briefing(
     return text, blocks
 
 
-def format_completion(completed_title: str) -> tuple[str, list[dict]]:
+def format_completion(
+    completed_title: str, url: Optional[str] = None
+) -> tuple[str, list[dict]]:
     """Format task completion confirmation.
+
+    Args:
+        completed_title: Title of the completed task
+        url: Optional URL to the task in source system
 
     Returns:
         Tuple of (text fallback, blocks)
     """
     text = f"✅ Completed: {completed_title}"
-    blocks = [section(f"✅ *Completed:* {completed_title}")]
+    if url:
+        blocks = [section(f"✅ *Completed:* <{url}|{completed_title}>")]
+    else:
+        blocks = [section(f"✅ *Completed:* {completed_title}")]
     return text, blocks
 
 
