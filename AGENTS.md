@@ -17,20 +17,31 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 | `backend/tests/` | pytest test suite (29 tests) |
 | `cli/ivan/` | CLI client (`ivan next`, `done`, `skip`, etc.) |
 | `docs/` | Documentation with YAML front matter |
-| `docs/plans/` | Product vision and design documents |
+| `docs/plans/` | Product vision, roadmaps, design documents |
+| `docs/templates/` | Templates for creating new phases |
+| `docs/processes/` | Standard processes (how to create phases, etc.) |
 
 ## Context Recovery
 
 **BEFORE ANY WORK, read these in order:**
 
-1. `docs/plans/2026-01-28-phase-4-roadmap.md` — Current implementation plan with 5 sprints
-2. `docs/plans/2026-01-27-product-vision.md` — Overall product vision and architecture
-3. Check GitHub issues: `gh issue list --repo markster-exec/project-tracker --label "area:product" --state open`
+1. **Current roadmap:** `ls -t docs/plans/*-roadmap.md | head -1` (most recent)
+2. **Product vision:** `docs/plans/2026-01-27-product-vision.md`
+3. **GitHub issues:** `gh issue list --repo markster-exec/project-tracker --state open`
+
+**Current Phase:** Phase 4 (as of 2026-01-28)
+- Roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
+- Issues: #24-28 in `markster-exec/project-tracker`
 
 **Track progress on GitHub:**
-- Issues #24-28 in `markster-exec/project-tracker` track Phase 4 sprints
 - Update issue comments when starting/completing work
 - Reference issues in commits: `feat(bot): add links (project-tracker#24)`
+
+**Creating a new phase:**
+1. Copy `docs/templates/phase-roadmap-template.md`
+2. Create GitHub issues for each sprint
+3. Update "Current Phase" section above
+4. Update "Current Status" section below
 
 ## Workflow
 
