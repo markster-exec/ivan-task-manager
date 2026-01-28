@@ -31,36 +31,6 @@ class TestNotificationConfig:
         assert "overdue" in THRESHOLD_EXEMPT_TRIGGERS
         assert "assigned" not in THRESHOLD_EXEMPT_TRIGGERS
 
-    def test_should_notify_respects_threshold(self):
-        """should_notify should check threshold for non-exempt triggers."""
-        config = NotificationConfig()
-        config.threshold = 500
-
-        # Below threshold, non-exempt trigger
-        assert config.should_notify("assigned", task_score=400) is False
-        # Above threshold, non-exempt trigger
-        assert config.should_notify("assigned", task_score=600) is True
-        # Below threshold, exempt trigger (deadline)
-        assert config.should_notify("deadline_warning", task_score=100) is True
-
-    def test_mode_off_disables_all(self):
-        """Mode 'off' should disable all notifications."""
-        config = NotificationConfig()
-        config.mode = "off"
-        assert config.should_notify("deadline_warning", task_score=1000) is False
-
-    def test_trigger_disabled_returns_false(self):
-        """Disabled trigger should not notify."""
-        config = NotificationConfig()
-        config.triggers["comment_on_owned"] = False
-        assert config.should_notify("comment_on_owned", task_score=1000) is False
-
-    def test_threshold_exact_match(self):
-        """Task score exactly matching threshold should notify."""
-        config = NotificationConfig()
-        config.threshold = 500
-        assert config.should_notify("assigned", task_score=500) is True
-
 
 class TestLoadConfig:
     """Tests for config file loading."""

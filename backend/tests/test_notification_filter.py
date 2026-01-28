@@ -95,3 +95,13 @@ class TestNotificationFilter:
             fingerprint="24h",
         )
         assert filter.should_notify(event, mock_task) is False
+
+    def test_handles_null_notification_state(self, filter, mock_task):
+        """Should handle task with no notification_state."""
+        mock_task.notification_state = None
+        event = Event(
+            trigger=EventType.ASSIGNED,
+            task_id="clickup:123",
+            fingerprint="assignee=ivan",
+        )
+        assert filter.should_notify(event, mock_task) is True

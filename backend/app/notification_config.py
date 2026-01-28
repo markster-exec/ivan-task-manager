@@ -47,23 +47,6 @@ class NotificationConfig:
         """Check if a trigger is enabled."""
         return self.triggers.get(trigger, False)
 
-    def should_notify(self, trigger: str, task_score: int) -> bool:
-        """Check if notification should be sent for this trigger and score."""
-        # Mode off disables everything
-        if self.mode == "off":
-            return False
-
-        # Check if trigger is enabled
-        if not self.is_trigger_enabled(trigger):
-            return False
-
-        # Check threshold (exempt triggers skip this)
-        if trigger not in THRESHOLD_EXEMPT_TRIGGERS:
-            if task_score < self.threshold:
-                return False
-
-        return True
-
 
 def load_notification_config(config_path: Optional[Path] = None) -> NotificationConfig:
     """Load notification config from YAML file.
