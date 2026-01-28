@@ -2,8 +2,6 @@
 
 Repository-specific instructions for ivan-task-manager.
 
-**Before starting:** Read `~/.codex/SYSTEM.md` for architecture and concepts.
-
 ---
 
 ## Quick Reference
@@ -13,6 +11,7 @@ Repository-specific instructions for ivan-task-manager.
 | Layer | **3 - Prioritization** (see `~/.codex/SYSTEM.md`) |
 | Live | https://backend-production-7a52.up.railway.app |
 | Repo | https://github.com/markster-exec/ivan-task-manager |
+| Repo Path | `/Users/ivanivanka/Developer/Work/ivan-task-manager` |
 | Stack | Python 3, FastAPI, SQLAlchemy, PostgreSQL (prod) |
 | State | **Read `STATE.md` for current position** |
 | Dedicated Account | ivan2@markster.ai |
@@ -35,6 +34,15 @@ This project has a dedicated Claude account (ivan2).
 ## Session Protocol (MANDATORY)
 
 Every session MUST follow this sequence:
+
+### 0. Read System Contract (if architecture work)
+**BEFORE any design decisions**, read `~/.codex/SYSTEM.md` to understand:
+- The 4-layer architecture
+- Core concepts (entity, workstream, intention)
+- Decision rules and scoring formula
+
+**Required for:** New features, new phases, architecture decisions, entity work.
+**Skip for:** Bug fixes, documentation, continuing existing design.
 
 ### 1. Read STATE.md
 Understand current position before doing anything.
@@ -68,6 +76,24 @@ Tests MUST pass before committing. Never push broken code.
 
 ### 6. Commit if tests pass
 Ivan is not a dev. If CI passes and no manual/UI testing needed, commit and push.
+
+---
+
+## Git Commands (IMPORTANT)
+
+**Always use absolute paths or `git -C` flag.** Working directory can be unreliable.
+
+```bash
+# CORRECT - use git -C with absolute path
+git -C /Users/ivanivanka/Developer/Work/ivan-task-manager status
+git -C /Users/ivanivanka/Developer/Work/ivan-task-manager log --oneline -10
+
+# WRONG - relies on working directory
+git status
+git log --oneline -10
+```
+
+If a git command fails with "not a git repository", immediately switch to `git -C` with the absolute repo path.
 
 ---
 
@@ -135,14 +161,14 @@ cp entities/example.yaml.template entities/firstname-lastname.yaml
 # Development
 docker-compose up
 
-# Test
-pytest backend/tests/ -v
+# Test (use absolute path)
+pytest /Users/ivanivanka/Developer/Work/ivan-task-manager/backend/tests/ -v
 
 # Lint
-ruff check backend/
+ruff check /Users/ivanivanka/Developer/Work/ivan-task-manager/backend/
 
 # Format
-black backend/
+black /Users/ivanivanka/Developer/Work/ivan-task-manager/backend/
 
 # Deploy
 railway up
@@ -191,7 +217,7 @@ railway up
 
 ## Creating a New Phase
 
-1. Read `~/.codex/SYSTEM.md` to understand where this fits
+1. **Read `~/.codex/SYSTEM.md`** to understand where this fits in the 4-layer architecture
 2. Use `superpowers:brainstorming` to design
 3. Create design doc in `docs/plans/`
 4. Create GitHub issue for the phase
