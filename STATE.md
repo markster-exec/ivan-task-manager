@@ -4,11 +4,11 @@
 
 ## Last Updated
 
-2026-01-28 18:30 UTC
+2026-01-28 23:55 UTC
 
 ## Current Phase
 
-Phase 4C — Bidirectional sync (complete)
+Phase 4F — Event-driven notifications (complete)
 
 ## Active Work
 
@@ -16,8 +16,8 @@ Phase 4C — Bidirectional sync (complete)
 |------|-------|
 | Branch | `main` |
 | PR | None |
-| Issue | [#3](https://github.com/markster-exec/ivan-task-manager/issues/3) |
-| Status | Complete |
+| Issue | None |
+| Status | Phase 4F complete, ready for next phase |
 
 ## Phase Roadmap
 
@@ -29,25 +29,39 @@ Phase 4C — Bidirectional sync (complete)
 | Phase 4C | **Complete** | Bidirectional sync (write to sources) |
 | Phase 4D | **Next** | Rich Slack input (files, docs) |
 | Phase 4E | Planned | Image/screenshot processing |
-| Phase 4F | Planned | Event-driven notifications (not score-based) |
+| Phase 4F | **Complete** | Event-driven notifications |
 | Phase 4G | Planned | Google Drive folder structure mirroring entities |
 
 ## Done This Session
 
-- Reviewed Phase 4C spec and existing implementation
-- Found that most of 4C was already implemented:
-  - Writers (ClickUp, GitHub): complete/comment/create
-  - Write API endpoints: /tasks/{id}/complete, /tasks/{id}/comment, /tasks
-  - Webhooks: /webhooks/github, /webhooks/clickup
-  - CLI: `ivan done`, `ivan comment`, `ivan create`
-- Fixed the two gaps:
-  - Bot `done` now writes back to source (was only local)
-  - Added bot `comment` command
-- Committed: `feat(bot): write back to source on done, add comment command`
+Implemented Phase 4F — Event-driven notifications:
+
+1. **Database**: Added `notification_state` JSON column to Task model for tracking last notification state
+2. **Config**: Created `config/notifications.yaml` with mode (focus/full/off), threshold, and trigger settings
+3. **Events**: Created `Event` dataclass and `EventType` enum (deadline_warning, overdue, assigned, status_critical, mentioned, comment_on_owned, blocker_resolved)
+4. **EventDetector**: Detects events by comparing task states during sync and webhook processing
+5. **NotificationFilter**: Filters notifications based on config (threshold, triggers, deduplication)
+6. **NotificationState**: Helpers for state management and deduplication
+7. **SlackNotifier**: Updated with event-based message formatting (human-readable messages per event type)
+8. **Integration**: Wired event system into `scheduled_sync()` and webhook endpoints
+9. **Tests**: All 125 tests passing with comprehensive coverage
+10. **Database atomicity**: Fixed transaction handling to commit after each task (not after loop)
+
+Files created/modified:
+- `backend/app/events.py` - Event dataclass and EventType enum
+- `backend/app/event_detector.py` - Event detection logic
+- `backend/app/notification_filter.py` - Filtering based on config
+- `backend/app/notification_state.py` - State management helpers
+- `backend/app/notification_config.py` - Config loader
+- `backend/app/notifier.py` - Updated with event-based messages
+- `backend/app/main.py` - Integrated event system
+- `backend/app/models.py` - Added notification_state column
+- `config/notifications.yaml` - Notification configuration
+- `docs/plans/2026-01-28-phase-4f-*.md` - Design and implementation plans
 
 ## Next Action
 
-Close Issue #3 and start Phase 4D (Rich Slack Input).
+Ready for Phase 4D (Rich Slack Input) or Phase 4G (Google Drive mirroring).
 
 ## Blockers
 
@@ -55,13 +69,19 @@ None
 
 ## Context for Next Session
 
-Phase 4C (Bidirectional sync) is complete. The system now:
-- Writes task completions back to ClickUp/GitHub via bot, CLI, and API
-- Supports adding comments via bot ("comment <text>"), CLI (`ivan comment`), and API
-- Receives webhooks for real-time sync from ClickUp/GitHub
-- Handles conflicts (shows note if task was already completed externally)
+Phase 4F (Event-driven notifications) is complete. The system now:
+- Detects semantic events (deadline approaching, overdue, assigned, mentioned, etc.)
+- Filters notifications based on config mode (focus/full/off), score threshold, and per-trigger settings
+- Formats human-readable messages per event type
+- Prevents duplicate notifications via state tracking in database
+- Commits after each task for atomicity (no duplicates on crash/restart)
 
-Bot commands now available:
+Notification configuration (`config/notifications.yaml`):
+- `mode`: focus (high-priority only), full (all), or off
+- `threshold`: minimum score for notification (deadline/overdue ignore threshold)
+- `triggers`: enable/disable specific event types
+
+Bot commands remain the same:
 - `next` - Get highest priority task
 - `done` - Mark complete in source system
 - `skip` - Skip to next task
@@ -74,4 +94,6 @@ Bot commands now available:
 ## References
 
 - Phase 4 roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
-- GitHub Issues: #1 (4A done), #2 (4B done), #3 (4C done), #4 (4D), #5 (4E), #7 (4F), #8 (4G)
+- Phase 4F design: `docs/plans/2026-01-28-phase-4f-event-notifications-design.md`
+- Phase 4F implementation: `docs/plans/2026-01-28-phase-4f-implementation-plan.md`
+- GitHub Issues: #1 (4A done), #2 (4B done), #3 (4C done), #4 (4D), #5 (4E), #7 (4F done), #8 (4G)
