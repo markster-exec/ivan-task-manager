@@ -88,17 +88,29 @@ class SlackNotifier:
         message: str,
         notification_type: str = "instant",
         task_id: Optional[str] = None,
+        thread_ts: Optional[str] = None,
     ):
-        """Send a direct message to Ivan."""
+        """Send a direct message to Ivan.
+
+        Args:
+            message: The message to send
+            notification_type: Type for deduplication (instant, morning, digest)
+            task_id: Optional task ID for deduplication
+            thread_ts: Optional thread timestamp to reply in a thread
+        """
         if not self._should_send(notification_type, task_id, message):
             return False
 
         try:
-            self.client.chat_postMessage(
-                channel=self.ivan_user_id,
-                text=message,
-                mrkdwn=True,
-            )
+            kwargs = {
+                "channel": self.ivan_user_id,
+                "text": message,
+                "mrkdwn": True,
+            }
+            if thread_ts:
+                kwargs["thread_ts"] = thread_ts
+
+            self.client.chat_postMessage(**kwargs)
             self._log_notification(notification_type, task_id, message)
             logger.info(f"Sent {notification_type} notification")
             return True

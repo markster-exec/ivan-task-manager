@@ -399,17 +399,21 @@ def create_app():
         text = event.get("text", "")
         user_id = event.get("user", "")
 
+        # Get thread_ts to reply in same thread (use thread_ts if in thread, else ts)
+        thread_ts = event.get("thread_ts") or event.get("ts")
+
         logger.info(f"Received DM from {user_id}: {text}")
 
         response = await route_message(text, user_id)
 
         if response:
-            await say(response)
+            await say(response, thread_ts=thread_ts)
         else:
             # Unknown command - show help
             await say(
                 "🤔 I didn't understand that. Here's what I can do:\n\n"
-                + await handle_help(user_id)
+                + await handle_help(user_id),
+                thread_ts=thread_ts
             )
 
     @bolt_app.event("app_mention")
@@ -417,6 +421,9 @@ def create_app():
         """Handle @mentions in channels."""
         text = event.get("text", "")
         user_id = event.get("user", "")
+
+        # Get thread_ts to reply in same thread (use thread_ts if in thread, else ts)
+        thread_ts = event.get("thread_ts") or event.get("ts")
 
         # Remove the mention itself
         text = re.sub(r"<@[A-Z0-9]+>", "", text).strip()
@@ -426,9 +433,12 @@ def create_app():
         response = await route_message(text, user_id)
 
         if response:
-            await say(response)
+            await say(response, thread_ts=thread_ts)
         else:
-            await say('👋 DM me for task management! Say "help" to see commands.')
+            await say(
+                '👋 DM me for task management! Say "help" to see commands.',
+                thread_ts=thread_ts
+            )
 
     return bolt_app
 
