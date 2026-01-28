@@ -9,9 +9,12 @@ Handles:
 import logging
 import hashlib
 from datetime import datetime, time
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from slack_sdk import WebClient
+
+if TYPE_CHECKING:
+    from .events import Event
 from slack_sdk.errors import SlackApiError
 
 from .config import get_settings
@@ -232,3 +235,106 @@ Reason: {reason}"""
             logger.info(f"Notified {blocker_user} about blocker")
         except SlackApiError as e:
             logger.error(f"Failed to notify {blocker_user}: {e}")
+
+    def format_event_message(self, event: "Event", task: "Task") -> str:
+        """Format notification message for an event.
+
+        Args:
+            event: The event that triggered the notification
+            task: The task associated with the event
+
+        Returns:
+            Formatted message string
+        """
+        from .events import EventType
+
+        trigger = event.trigger
+        ctx = event.context
+
+        if trigger == EventType.DEADLINE_WARNING:
+            urgency = ctx.get("urgency", "soon")
+            if urgency == "today":
+                time_str = "in 2 hours"
+            else:
+                time_str = "in 24 hours"
+            return (
+                f"⏰ *Deadline {time_str}*\n"
+                f'"{task.title}"\n'
+                f"Due: {ctx.get('due_date', 'Unknown')}\n"
+                f"<{task.url}|View task>"
+            )
+
+        elif trigger == EventType.OVERDUE:
+            days = ctx.get("days_overdue", 1)
+            days_str = f"{days} day{'s' if days > 1 else ''}"
+            return (
+                f"🔴 *Overdue*\n"
+                f'"{task.title}"\n'
+                f"Was due: {ctx.get('due_date', 'Unknown')} ({days_str} ago)\n"
+                f"<{task.url}|View task>"
+            )
+
+        elif trigger == EventType.ASSIGNED:
+            prev = ctx.get("prev_assignee", "someone")
+            return (
+                f"📥 *Newly assigned to you*\n"
+                f'"{task.title}"\n'
+                f"Previously: {prev or 'unassigned'}\n"
+                f"<{task.url}|View task>"
+            )
+
+        elif trigger == EventType.STATUS_CRITICAL:
+            status = ctx.get("new_status", "critical")
+            return (
+                f"🚨 *Status changed to {status}*\n"
+                f'"{task.title}"\n'
+                f"<{task.url}|View task>"
+            )
+
+        elif trigger == EventType.MENTIONED:
+            commenter = ctx.get("commenter", "Someone")
+            preview = ctx.get("body_preview", "")
+            return (
+                f"💬 *You were mentioned*\n"
+                f'"{task.title}"\n'
+                f"By: {commenter}\n"
+                f'"{preview}"\n'
+                f"<{task.url}|View task>"
+            )
+
+        elif trigger == EventType.COMMENT_ON_OWNED:
+            commenter = ctx.get("commenter", "Someone")
+            return (
+                f"💬 *New comment on your task*\n"
+                f'"{task.title}"\n'
+                f"By: {commenter}\n"
+                f"<{task.url}|View task>"
+            )
+
+        elif trigger == EventType.BLOCKER_RESOLVED:
+            return (
+                f"✅ *Blocker resolved*\n"
+                f'"{task.title}"\n'
+                f"You can now proceed\n"
+                f"<{task.url}|View task>"
+            )
+
+        else:
+            return f"📢 *Notification*\n" f'"{task.title}"\n' f"<{task.url}|View task>"
+
+    async def send_event_notification(self, event: "Event", task: "Task") -> bool:
+        """Send notification for an event.
+
+        Args:
+            event: The event that triggered the notification
+            task: The task associated with the event
+
+        Returns:
+            True if notification was sent successfully
+        """
+        message = self.format_event_message(event, task)
+        return await self.send_dm(
+            message,
+            notification_type=event.trigger.value,
+            task_id=task.id,
+        )
