@@ -106,15 +106,21 @@ def format_task(task: dict, show_context: bool = True) -> Panel:
 
     content = Text()
     content.append(f"Score: {task.get('score', 0)}", style="bold")
-    content.append(f" | {' | '.join(flags)}\n\n", style="dim")
+    content.append(f" | {' | '.join(flags)}\n", style="dim")
 
-    if task.get("description"):
-        desc = task["description"][:200]
-        if len(task["description"]) > 200:
-            desc += "..."
-        content.append(f"{desc}\n\n", style="dim")
+    # Entity context
+    if breakdown.get("entity_name"):
+        ws_info = ""
+        if breakdown.get("workstream_name"):
+            ws_info = f" - {breakdown['workstream_name']}"
+            if breakdown.get("workstream_deadline"):
+                ws_info += f" by {breakdown['workstream_deadline']}"
+        content.append(f"-> {breakdown['entity_name']}{ws_info}\n", style="magenta")
 
-    content.append(f"🔗 {task.get('url', 'No URL')}", style="cyan underline")
+    content.append("\n")
+
+    # Task URL
+    content.append(f"Task: {task.get('url', 'No URL')}", style="cyan underline")
 
     return Panel(
         content,
