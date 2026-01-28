@@ -1,43 +1,63 @@
-# Example entity file - copy and customize
-# See docs/plans/2026-01-28-phase-4b-entity-awareness-design.md for full schema
+# Entity Template
+# Schema: ~/.codex/schemas/entity.yaml
+# Copy this file and rename to: firstname-lastname.yaml
 
-id: firstname-lastname          # Unique slug (lowercase, hyphens)
-type: person                    # person | company
-name: First Last                # Display name
-created: 2026-01-28             # ISO date
-updated: 2026-01-28             # ISO date
-tags:
-  - client
-  - priority
+# =============================================================================
+# REQUIRED FIELDS
+# =============================================================================
 
-# Optional identity
+id: firstname-lastname              # Unique slug: lowercase, hyphenated
+type: person                        # person | company
+name: First Last                    # Display name
+created: 2026-01-28                 # ISO date
+updated: 2026-01-28                 # ISO date
+relationship_type: client           # client|prospect|partner|investor|team|vendor|network
+intention: "Current → Next → Goal"  # Strategic goal for this relationship
+
+# =============================================================================
+# OPTIONAL: Identity
+# =============================================================================
+
 company: Company Name
 email: email@example.com
 # linkedin: https://linkedin.com/in/...
 # phone: "+1-555-..."
 
-# Relationship
-relationship_type: client       # client|prospect|partner|investor|team|vendor|network
-# priority: 5                   # Override (1-5, default from relationship_type)
-intention: "One sentence about what we're trying to achieve"
+# =============================================================================
+# OPTIONAL: Classification
+# =============================================================================
 
-# Workstreams (projects/initiatives)
+tags:
+  - tag1
+  - tag2
+# priority: 4                       # Override default (1-5)
+
+# =============================================================================
+# WORKSTREAMS (projects/initiatives)
+# =============================================================================
+
 workstreams:
-  - id: main-project
-    name: Main Project
-    status: active              # planned|active|blocked|complete
-    deadline: 2026-02-15
-    # milestone: "Launch"
-    # revenue_potential: "$10,000+"
+  - id: main-project                # Unique within entity
+    name: Main Project              # Display name
+    status: active                  # planned|active|blocked|complete
+    deadline: 2026-02-15            # Optional
+    # milestone: "Launch"           # What deadline represents
+    # revenue_potential: "$10,000+" # If applicable
 
-# Cross-references (where to work)
+# =============================================================================
+# CROSS-REFERENCES (where work happens)
+# =============================================================================
+
 channels:
-  # gdoc: "document-id-here"
-  # github: "org/repo#issue"
-  # clickup: "task-id"
-  # slack: "#channel-name"
+  # gdoc: "document-id"             # Google Doc brief
+  # github: "org/repo#issue"        # GitHub issue
+  # clickup: "task-id"              # ClickUp task
+  # slack: "#channel-name"          # Slack channel
 
-# Context for AI
+# =============================================================================
+# CONTEXT FOR AI
+# =============================================================================
+
 context_summary: |
   2-3 sentences about this relationship.
   What matters, what's the current focus.

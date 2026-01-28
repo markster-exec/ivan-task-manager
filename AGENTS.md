@@ -1,25 +1,36 @@
 # AGENTS
 
-Repository-specific instructions for ivan-task-manager. Global standards in `~/.codex/AGENTS.md`.
+Repository-specific instructions for ivan-task-manager.
 
-## Mission
+**Before starting:** Read `~/.codex/SYSTEM.md` for architecture and concepts.
 
-Unified task management system that aggregates tasks from ClickUp and GitHub, provides intelligent prioritization, and delivers actionable notifications via Slack.
+---
 
 ## Quick Reference
 
 | Item | Value |
 |------|-------|
+| Layer | **3 - Prioritization** (see `~/.codex/SYSTEM.md`) |
 | Live | https://backend-production-7a52.up.railway.app |
 | Repo | https://github.com/markster-exec/ivan-task-manager |
 | Stack | Python 3, FastAPI, SQLAlchemy, PostgreSQL (prod) |
 | State | **Read `STATE.md` for current position** |
 | Dedicated Account | ivan2@markster.ai |
 
-**IMPORTANT:** This project has a dedicated Claude account (ivan2).
-- Use `STATE.md` in THIS repo for state tracking
-- Do NOT read/write the global `~/Developer/SESSION_STATE.md`
-- That file is for the main coordinator account only
+---
+
+## Dedicated Account Rules
+
+This project has a dedicated Claude account (ivan2).
+
+| Rule | Requirement |
+|------|-------------|
+| State file | Use `STATE.md` in THIS repo only |
+| Global state | Do NOT read/write `~/Developer/SESSION_STATE.md` |
+| Entity schema | Use `~/.codex/schemas/entity.yaml` |
+| Standards | Follow `~/.codex/AGENTS.md` for commits, PRs |
+
+---
 
 ## Session Protocol (MANDATORY)
 
@@ -58,17 +69,65 @@ Tests MUST pass before committing. Never push broken code.
 ### 6. Commit if tests pass
 Ivan is not a dev. If CI passes and no manual/UI testing needed, commit and push.
 
+---
+
+## Mission
+
+Layer 3 of the Markster system: **Prioritization**.
+
+- Aggregates tasks from ClickUp and GitHub
+- Scores and ranks by urgency, revenue, blocking, entity priority
+- Delivers actionable notifications via Slack
+- Provides CLI for task management
+
+---
+
+## Entity Integration
+
+Entities live in `entities/` directory. Use canonical schema from `~/.codex/schemas/entity.yaml`.
+
+### Creating an Entity
+```bash
+cp entities/example.yaml.template entities/firstname-lastname.yaml
+# Edit with required fields from canonical schema
+```
+
+### Required Fields (from canonical schema)
+- `id`: lowercase, hyphenated slug
+- `type`: person | company
+- `name`: display name
+- `relationship_type`: client|prospect|partner|investor|team|vendor|network
+- `intention`: "Current → Next → Goal"
+
+### Task-Entity Mapping
+1. **GitHub**: `[CLIENT:entity-id]` in title
+2. **ClickUp**: `client:entity-id` tag
+3. **Overrides**: `entities/mappings.yaml`
+
+---
+
 ## Project Structure
 
 | Directory | Purpose |
 |-----------|---------|
-| `backend/app/` | FastAPI application (main.py, bot.py, syncer.py, scorer.py, notifier.py) |
+| `backend/app/` | FastAPI application |
 | `backend/tests/` | pytest test suite |
-| `cli/ivan/` | CLI client (`ivan next`, `done`, `skip`, etc.) |
-| `docs/` | Documentation with YAML front matter |
-| `docs/plans/` | Product vision, roadmaps, design documents |
-| `docs/templates/` | Templates for creating new phases |
-| `docs/processes/` | Standard processes (how to create phases, etc.) |
+| `cli/ivan/` | CLI client |
+| `entities/` | Entity YAML files |
+| `docs/plans/` | Design documents |
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `STATE.md` | Current working state (read first) |
+| `backend/app/main.py` | FastAPI + scheduled jobs |
+| `backend/app/bot.py` | Slack bot (Socket Mode) |
+| `backend/app/scorer.py` | Task prioritization |
+| `backend/app/entity_loader.py` | Entity YAML loading |
+| `backend/app/entity_mapper.py` | Task-entity mapping |
+
+---
 
 ## Commands
 
@@ -89,18 +148,7 @@ black backend/
 railway up
 ```
 
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `STATE.md` | Current working state (read first every session) |
-| `backend/app/main.py` | FastAPI application + scheduled jobs |
-| `backend/app/bot.py` | Slack bot listener (Socket Mode) |
-| `backend/app/slack_blocks.py` | Slack Block Kit formatting utilities |
-| `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
-| `backend/app/scorer.py` | Task prioritization (Revenue → Blocking → Urgency → Recency) |
-| `backend/app/notifier.py` | Slack notifications (instant, digest, morning) |
-| `backend/app/models.py` | SQLAlchemy models (Task, SyncState, DigestState) |
+---
 
 ## Key Endpoints
 
@@ -112,39 +160,39 @@ railway up
 | `/done` | POST | Mark current task complete |
 | `/skip` | POST | Skip current task |
 | `/sync` | POST | Force sync from sources |
-| `/morning` | GET | Morning briefing data |
+| `/entities` | GET | List all entities |
+| `/entities/{id}` | GET | Entity detail |
+
+---
 
 ## Environment Variables
 
 **Required:**
-- `CLICKUP_API_TOKEN` - ClickUp API token
-- `CLICKUP_LIST_ID` - ClickUp list to sync (default: 901215490741)
-- `GITHUB_TOKEN` - GitHub personal access token
-- `GITHUB_REPO` - GitHub repo (owner/name)
-- `SLACK_BOT_TOKEN` - Slack bot token (xoxb-...)
-- `SLACK_APP_TOKEN` - Slack app token for Socket Mode (xapp-...)
-- `SLACK_IVAN_USER_ID` - Slack user ID for DMs
+- `CLICKUP_API_TOKEN`, `CLICKUP_LIST_ID`
+- `GITHUB_TOKEN`, `GITHUB_REPO`
+- `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_IVAN_USER_ID`
 
 **Optional:**
-- `DATABASE_URL` - Database connection string (default: sqlite:///./tasks.db)
-- `SYNC_INTERVAL_MINUTES` - Sync frequency (default: 60)
-- `MORNING_BRIEFING_TIME` - Daily briefing time (default: 07:00)
-- `QUIET_HOURS_START` - Notification quiet start (default: 22:00)
-- `QUIET_HOURS_END` - Notification quiet end (default: 07:00)
-- `AZURE_OPENAI_ENDPOINT` - Azure OpenAI for intent classification
-- `AZURE_OPENAI_API_KEY` - Azure OpenAI API key
+- `DATABASE_URL` (default: sqlite)
+- `SYNC_INTERVAL_MINUTES` (default: 60)
+- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`
+
+---
 
 ## Standards
 
-1. Follow [Markster Development Standard](https://github.com/markster-exec/project-tracker/blob/main/docs/standards/markster-development-standard.md)
-2. Commit format: `<type>(<scope>): <summary>`
-3. PRs required for main branch
+1. Follow `~/.codex/AGENTS.md` for commits, PRs, labels
+2. Follow `~/.codex/SYSTEM.md` for architecture decisions
+3. Use `~/.codex/schemas/entity.yaml` for entity definitions
 4. Tests required for behavior changes
-5. Update `CHANGELOG.md` for behavior changes
-6. All docs under `docs/` MUST have YAML front matter
+5. All docs under `docs/` MUST have YAML front matter
+
+---
 
 ## Creating a New Phase
 
-1. Copy `docs/templates/phase-roadmap-template.md`
-2. Create GitHub issues for each sprint
-3. Update `STATE.md` with new phase info
+1. Read `~/.codex/SYSTEM.md` to understand where this fits
+2. Use `superpowers:brainstorming` to design
+3. Create design doc in `docs/plans/`
+4. Create GitHub issue for the phase
+5. Update `STATE.md` with new phase info
