@@ -95,22 +95,46 @@ def enrich_task_with_entity(task: Task) -> tuple[Task, dict]:
 
 
 async def scheduled_sync():
-    """Hourly sync job."""
+    """Scheduled sync job with event-based notifications."""
+    from .event_detector import EventDetector
+    from .notification_filter import NotificationFilter
+    from .notification_config import get_notification_config
+    from .notification_state import update_notification_state, update_prev_state_only
+
     logger.info("Running scheduled sync...")
     results = await sync_all_sources()
     logger.info(f"Sync complete: {results}")
 
-    # Check for urgent tasks and send instant notifications
+    # Event-based notifications
+    config = get_notification_config()
+    detector = EventDetector()
+    notif_filter = NotificationFilter(config)
+
     db = SessionLocal()
     try:
         tasks = (
             db.query(Task).filter(Task.status != "done", Task.assignee == "ivan").all()
         )
-        tasks = score_and_sort_tasks(tasks)
 
         for task in tasks:
-            if task.score >= 1000:
-                await notifier.send_instant_notification(task, "High priority task")
+            # Detect events from state changes
+            events = detector.detect_from_sync(task)
+
+            notified = False
+            for event in events:
+                # Check if we should notify
+                if notif_filter.should_notify(event, task):
+                    # Send notification
+                    success = await notifier.send_event_notification(event, task)
+                    if success:
+                        update_notification_state(task, event)
+                        notified = True
+
+            # Always update prev_* state for next comparison
+            if not notified:
+                update_prev_state_only(task)
+
+        db.commit()
     finally:
         db.close()
 
@@ -851,6 +875,26 @@ async def github_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
             logger.info(f"GitHub webhook: updated {task_id}")
 
+    # Event detection for comment notifications
+    if event == "issue_comment" and action == "created":
+        from .event_detector import EventDetector
+        from .notification_filter import NotificationFilter
+        from .notification_config import get_notification_config
+        from .notification_state import update_notification_state
+
+        config = get_notification_config()
+        detector = EventDetector()
+        notif_filter = NotificationFilter(config)
+
+        evt = detector.parse_webhook_event("github", event, payload)
+        if evt:
+            issue_number = payload.get("issue", {}).get("number")
+            task = db.query(Task).filter(Task.id == f"github:{issue_number}").first()
+            if task and notif_filter.should_notify(evt, task):
+                await notifier.send_event_notification(evt, task)
+                update_notification_state(task, evt)
+                db.commit()
+
     return {"status": "ok", "event": event, "action": action}
 
 
@@ -899,5 +943,23 @@ async def clickup_webhook(request: Request, db: Session = Depends(get_db)):
         task.updated_at = datetime.utcnow()
         db.commit()
         logger.info(f"ClickUp webhook: updated {task_id}")
+
+    # Event detection for comment notifications
+    if event == "taskCommentPosted":
+        from .event_detector import EventDetector
+        from .notification_filter import NotificationFilter
+        from .notification_config import get_notification_config
+        from .notification_state import update_notification_state
+
+        config = get_notification_config()
+        detector = EventDetector()
+        notif_filter = NotificationFilter(config)
+
+        evt = detector.parse_webhook_event("clickup", event, payload)
+        if evt and task:
+            if notif_filter.should_notify(evt, task):
+                await notifier.send_event_notification(evt, task)
+                update_notification_state(task, evt)
+                db.commit()
 
     return {"status": "ok", "event": event}
