@@ -1,0 +1,8 @@
+# Task-to-entity manual overrides
+# Use this for tasks that don't have [CLIENT:x] tags
+
+task_overrides: {}
+  # Example:
+  # "clickup:869bxxud4":
+  #   entity: mark-smith
+  #   workstream: workshop
