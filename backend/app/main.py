@@ -32,6 +32,7 @@ from .scorer import (
 )
 from .syncer import sync_all_sources
 from .notifier import SlackNotifier
+from .writers import get_writer
 
 # Bot is optional - only imported if slack_bolt is available
 try:
@@ -331,6 +332,24 @@ class EntityDetailResponse(BaseModel):
     workstreams: list[WorkstreamResponse]
     channels: dict[str, str]
     context_summary: Optional[str]
+
+
+class CommentRequest(BaseModel):
+    text: str
+
+
+class CreateTaskRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    entity_id: Optional[str] = None
+
+
+class WriteResultResponse(BaseModel):
+    success: bool
+    message: str
+    source_id: Optional[str] = None
+    conflict: bool = False
+    current_state: Optional[str] = None
 
 
 # =============================================================================
@@ -673,3 +692,78 @@ async def reload_entities():
         entities_path = Path(__file__).parent.parent.parent / settings.entities_dir
     load_entities(entities_path)
     return {"message": f"Reloaded {len(get_all_entities())} entities"}
+
+
+# =============================================================================
+# Write API Routes (Bidirectional Sync)
+# =============================================================================
+
+
+@app.post("/tasks/{task_id}/complete", response_model=WriteResultResponse)
+async def complete_task_in_source(task_id: str, db: Session = Depends(get_db)):
+    """Mark task complete in its source system (ClickUp/GitHub)."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+
+    # Extract source_id from task.id (format: "source:source_id")
+    source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+
+    writer = get_writer(task.source)
+    result = await writer.complete(source_id)
+
+    if result.success and not result.conflict:
+        task.status = "done"
+        task.updated_at = datetime.utcnow()
+        db.commit()
+
+    return WriteResultResponse(
+        success=result.success,
+        message=result.message,
+        conflict=result.conflict,
+        current_state=result.current_state,
+    )
+
+
+@app.post("/tasks/{task_id}/comment", response_model=WriteResultResponse)
+async def add_comment_to_source(
+    task_id: str, request: CommentRequest, db: Session = Depends(get_db)
+):
+    """Add comment to task in its source system."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+
+    # Extract source_id from task.id (format: "source:source_id")
+    source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+
+    writer = get_writer(task.source)
+    result = await writer.comment(source_id, request.text)
+
+    return WriteResultResponse(
+        success=result.success,
+        message=result.message,
+    )
+
+
+@app.post("/tasks", response_model=WriteResultResponse)
+async def create_task_in_source(
+    request: CreateTaskRequest,
+    source: str = "clickup",
+):
+    """Create new task in source system."""
+    if source not in ["clickup", "github"]:
+        raise HTTPException(status_code=400, detail=f"Unknown source: {source}")
+
+    writer = get_writer(source)
+    result = await writer.create(
+        title=request.title,
+        description=request.description,
+        entity_id=request.entity_id,
+    )
+
+    return WriteResultResponse(
+        success=result.success,
+        message=result.message,
+        source_id=result.source_id,
+    )

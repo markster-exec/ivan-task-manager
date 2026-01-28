@@ -3,13 +3,14 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from datetime import date
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Task
+from app.writers.base import WriteResult
 
 
 # Create test database with thread safety for TestClient
@@ -53,6 +54,9 @@ def client():
         list_entities,
         get_entity_detail,
         reload_entities,
+        complete_task_in_source,
+        add_comment_to_source,
+        create_task_in_source,
         get_db,
     )
 
@@ -69,6 +73,9 @@ def client():
     test_app.get("/entities")(list_entities)
     test_app.get("/entities/{entity_id}")(get_entity_detail)
     test_app.post("/entities/reload")(reload_entities)
+    test_app.post("/tasks/{task_id}/complete")(complete_task_in_source)
+    test_app.post("/tasks/{task_id}/comment")(add_comment_to_source)
+    test_app.post("/tasks")(create_task_in_source)
 
     # Override the database dependency
     test_app.dependency_overrides[get_db] = get_test_db
@@ -222,3 +229,172 @@ class TestEntityEndpoints:
         response = client.post("/entities/reload")
         assert response.status_code == 200
         assert "reloaded" in response.json()["message"].lower()
+
+
+class TestCompleteTaskInSource:
+    """Test POST /tasks/{task_id}/complete endpoint."""
+
+    def test_complete_not_found(self, client):
+        """Complete non-existent task returns 404."""
+        response = client.post("/tasks/nonexistent/complete")
+        assert response.status_code == 404
+
+    def test_complete_success(self, client):
+        """Complete task marks it done in source and locally."""
+        # Add a task (id format: "source:source_id")
+        db = TestSessionLocal()
+        task = Task(
+            id="clickup:abc123",
+            source="clickup",
+            title="Test Task",
+            status="todo",
+            assignee="ivan",
+            url="http://test",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.complete.return_value = WriteResult(
+                success=True, message="Task completed in ClickUp"
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post("/tasks/clickup:abc123/complete")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "ClickUp" in data["message"]
+            # Verify correct source_id was extracted
+            mock_writer.complete.assert_called_once_with("abc123")
+
+    def test_complete_conflict_detected(self, client):
+        """Complete returns conflict when task already done in source."""
+        db = TestSessionLocal()
+        task = Task(
+            id="github:456",
+            source="github",
+            title="Already Done",
+            status="todo",
+            assignee="ivan",
+            url="http://test",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.complete.return_value = WriteResult(
+                success=True,
+                message="Issue already closed",
+                conflict=True,
+                current_state="closed",
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post("/tasks/github:456/complete")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["conflict"] is True
+            assert data["current_state"] == "closed"
+
+
+class TestAddCommentToSource:
+    """Test POST /tasks/{task_id}/comment endpoint."""
+
+    def test_comment_not_found(self, client):
+        """Comment on non-existent task returns 404."""
+        response = client.post("/tasks/nonexistent/comment", json={"text": "Hello"})
+        assert response.status_code == 404
+
+    def test_comment_success(self, client):
+        """Comment is added to source."""
+        db = TestSessionLocal()
+        task = Task(
+            id="clickup:xyz789",
+            source="clickup",
+            title="Commentable",
+            status="todo",
+            assignee="ivan",
+            url="http://test",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.comment.return_value = WriteResult(
+                success=True, message="Comment added to ClickUp"
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post(
+                "/tasks/clickup:xyz789/comment", json={"text": "My comment"}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+
+            mock_writer.comment.assert_called_once_with("xyz789", "My comment")
+
+
+class TestCreateTaskInSource:
+    """Test POST /tasks endpoint."""
+
+    def test_create_success(self, client):
+        """Create task in ClickUp succeeds."""
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.create.return_value = WriteResult(
+                success=True,
+                message="Task created in ClickUp",
+                source_id="new-task-id",
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post(
+                "/tasks?source=clickup",
+                json={"title": "New Task", "description": "Details"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["source_id"] == "new-task-id"
+
+    def test_create_github(self, client):
+        """Create task in GitHub succeeds."""
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.create.return_value = WriteResult(
+                success=True,
+                message="Issue created in GitHub",
+                source_id="123",
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post(
+                "/tasks?source=github",
+                json={"title": "Bug Report"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+
+    def test_create_unknown_source(self, client):
+        """Create with unknown source returns 400."""
+        response = client.post(
+            "/tasks?source=jira",
+            json={"title": "Task"},
+        )
+        assert response.status_code == 400
