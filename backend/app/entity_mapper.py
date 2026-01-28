@@ -53,8 +53,8 @@ def parse_clickup_tags(source_data: Optional[dict]) -> Optional[tuple[str, Optio
         if tag_name.startswith("client:"):
             parts = tag_name.split(":")
             if len(parts) >= 2:
-                entity_id = parts[1]
-                workstream_id = parts[2] if len(parts) >= 3 else None
+                entity_id = parts[1].lower()
+                workstream_id = parts[2].lower() if len(parts) >= 3 else None
                 return (entity_id, workstream_id)
 
     return None
