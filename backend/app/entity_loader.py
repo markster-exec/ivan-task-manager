@@ -2,9 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import yaml
+from yaml import YAMLError
+from pydantic import ValidationError
 
 from .entity_models import Entity
 
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # In-memory cache
 _entities: dict[str, Entity] = {}
-_mappings: dict[str, dict] = {}
+_mappings: dict[str, dict[str, Optional[str]]] = {}
 
 
 def load_entities(entities_dir: Path) -> None:
@@ -41,8 +43,12 @@ def load_entities(entities_dir: Path) -> None:
                 _entities[entity.id] = entity
                 logger.debug(f"Loaded entity: {entity.id}")
 
+        except YAMLError as e:
+            logger.error(f"Invalid YAML in {yaml_file.name}: {e}")
+        except ValidationError as e:
+            logger.error(f"Invalid entity data in {yaml_file.name}: {e}")
         except Exception as e:
-            logger.error(f"Failed to load {yaml_file}: {e}")
+            logger.error(f"Failed to load {yaml_file.name}: {type(e).__name__}: {e}")
 
     logger.info(f"Loaded {len(_entities)} entities")
 
@@ -78,10 +84,15 @@ def get_override(task_id: str) -> Optional[tuple[str, Optional[str]]]:
         Tuple of (entity_id, workstream_id) or None if no override.
         workstream_id may be None if only entity is specified.
     """
-    if task_id in _mappings:
-        override = _mappings[task_id]
-        return (override["entity"], override.get("workstream"))
-    return None
+    if task_id not in _mappings:
+        return None
+
+    override = _mappings[task_id]
+    if "entity" not in override:
+        logger.warning(f"Invalid override for {task_id}: missing 'entity' key")
+        return None
+
+    return (override["entity"], override.get("workstream"))
 
 
 def find_entity_by_name(name: str) -> Optional[Entity]:
