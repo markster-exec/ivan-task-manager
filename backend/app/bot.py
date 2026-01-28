@@ -70,7 +70,7 @@ Score: {task.score} | {' | '.join(flags)}
 
 {desc}
 
-🔗 {task.url}
+<{task.url}|🔗 View task>
 
 _Reply "done" when finished, "skip" to move to next._"""
 
@@ -150,7 +150,7 @@ async def handle_skip(user_id: str) -> str:
 *{next_task.title}*
 Score: {next_task.score} | {' | '.join(flags)}
 
-🔗 {next_task.url}"""
+<{next_task.url}|🔗 View task>"""
 
     finally:
         db.close()
@@ -174,9 +174,8 @@ async def handle_tasks(user_id: str) -> str:
             breakdown = get_score_breakdown(task)
             emoji = "🔴" if task.score >= 1000 else "🟡" if task.score >= 500 else "🟢"
             lines.append(
-                f"{emoji} {i}. *{task.title}*\n"
-                f"    Score: {task.score} | {breakdown['urgency_label']}\n"
-                f"    🔗 {task.url}"
+                f"{emoji} {i}. <{task.url}|{task.title}>\n"
+                f"    Score: {task.score} | {breakdown['urgency_label']}"
             )
 
         if len(tasks) > 10:
@@ -215,9 +214,8 @@ async def handle_morning(user_id: str) -> str:
             flags.append(breakdown["urgency_label"])
 
             focus_lines.append(
-                f"{i}. *{task.title}* (Score: {task.score})\n"
-                f"   → {' | '.join(flags)}\n"
-                f"   🔗 {task.url}"
+                f"{i}. <{task.url}|{task.title}> (Score: {task.score})\n"
+                f"   → {' | '.join(flags)}"
             )
 
         # Stats

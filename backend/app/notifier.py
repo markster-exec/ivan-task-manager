@@ -112,11 +112,9 @@ class SlackNotifier:
 
         message = f"""🚨 *Urgent Task Alert*
 
-*{task.title}*
+<{task.url}|*{task.title}*>
 Score: {task.score} | {breakdown['urgency_label']}
-Reason: {reason}
-
-🔗 {task.url}"""
+Reason: {reason}"""
 
         await self.send_dm(message, "instant", task.id)
 
@@ -140,9 +138,8 @@ Reason: {reason}
             flags.append(breakdown["urgency_label"])
 
             focus_lines.append(
-                f"{i}. *{task.title}* (Score: {task.score})\n"
-                f"   → {' | '.join(flags)}\n"
-                f"   🔗 {task.url}"
+                f"{i}. <{task.url}|{task.title}> (Score: {task.score})\n"
+                f"   → {' | '.join(flags)}"
             )
 
         # Summary stats
@@ -180,12 +177,12 @@ Type `ivan next` to start working."""
         if new_tasks:
             lines.append("*New tasks assigned:*")
             for task in new_tasks[:5]:
-                lines.append(f"• {task.title}")
+                lines.append(f"• <{task.url}|{task.title}>")
 
         if updated_tasks:
             lines.append("\n*Updates on your tasks:*")
             for task in updated_tasks[:5]:
-                lines.append(f"• {task.title}")
+                lines.append(f"• <{task.url}|{task.title}>")
 
         message = f"""📋 *Hourly Update*
 
@@ -211,10 +208,8 @@ Type `ivan tasks` for full list."""
 
 Ivan is blocked on a task waiting for you:
 
-*{task.title}*
-Reason: {reason}
-
-🔗 {task.url}"""
+<{task.url}|*{task.title}*>
+Reason: {reason}"""
 
         try:
             self.client.chat_postMessage(
