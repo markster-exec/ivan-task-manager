@@ -119,7 +119,9 @@ def format_next_task(
     return text, blocks
 
 
-def format_task_list(tasks_data: list[dict], total_count: int) -> tuple[str, list[dict]]:
+def format_task_list(
+    tasks_data: list[dict], total_count: int
+) -> tuple[str, list[dict]]:
     """Format the task list response with Block Kit.
 
     Args:
@@ -182,18 +184,20 @@ def format_morning_briefing(
             )
         )
 
-    blocks.extend([
-        divider(),
-        section(
-            f"📊 *SUMMARY*\n"
-            f"• {stats['total']} total tasks\n"
-            f"• {stats['overdue']} overdue\n"
-            f"• {stats['due_today']} due today\n"
-            f"• {stats['blocking_count']} people waiting on you"
-        ),
-        divider(),
-        context('Say "next" to start working!'),
-    ])
+    blocks.extend(
+        [
+            divider(),
+            section(
+                f"📊 *SUMMARY*\n"
+                f"• {stats['total']} total tasks\n"
+                f"• {stats['overdue']} overdue\n"
+                f"• {stats['due_today']} due today\n"
+                f"• {stats['blocking_count']} people waiting on you"
+            ),
+            divider(),
+            context('Say "next" to start working!'),
+        ]
+    )
 
     return text, blocks
 

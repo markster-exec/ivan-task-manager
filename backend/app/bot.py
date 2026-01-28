@@ -104,7 +104,9 @@ async def handle_done(user_id: str) -> dict:
 
         # Get next task
         next_response = await handle_next(user_id)
-        completion_text, completion_blocks = slack_blocks.format_completion(completed_title)
+        completion_text, completion_blocks = slack_blocks.format_completion(
+            completed_title
+        )
 
         # Combine completion + next task blocks
         blocks = completion_blocks + [slack_blocks.divider()]
@@ -150,7 +152,10 @@ async def handle_skip(user_id: str) -> dict:
         if not tasks:
             skip_text, skip_blocks = slack_blocks.format_skip(skipped_title)
             skip_blocks.append(slack_blocks.context("No more tasks in queue."))
-            return {"text": f"{skip_text}\n\nNo more tasks in queue.", "blocks": skip_blocks}
+            return {
+                "text": f"{skip_text}\n\nNo more tasks in queue.",
+                "blocks": skip_blocks,
+            }
 
         tasks = score_and_sort_tasks(tasks)
         next_task = tasks[0]
@@ -208,13 +213,15 @@ async def handle_tasks(user_id: str) -> dict:
         for task in tasks[:10]:
             breakdown = get_score_breakdown(task)
             emoji = "🔴" if task.score >= 1000 else "🟡" if task.score >= 500 else "🟢"
-            tasks_data.append({
-                "title": task.title,
-                "url": task.url,
-                "score": task.score,
-                "urgency_label": breakdown["urgency_label"],
-                "emoji": emoji,
-            })
+            tasks_data.append(
+                {
+                    "title": task.title,
+                    "url": task.url,
+                    "score": task.score,
+                    "urgency_label": breakdown["urgency_label"],
+                    "emoji": emoji,
+                }
+            )
 
         text, blocks = slack_blocks.format_task_list(tasks_data, len(tasks))
         return {"text": text, "blocks": blocks}
@@ -251,12 +258,14 @@ async def handle_morning(user_id: str) -> dict:
                 flags.append(f"🚫 Blocking: {', '.join(task.is_blocking)}")
             flags.append(f"⏰ {breakdown['urgency_label']}")
 
-            focus_tasks.append({
-                "title": task.title,
-                "url": task.url,
-                "score": task.score,
-                "flags": flags,
-            })
+            focus_tasks.append(
+                {
+                    "title": task.title,
+                    "url": task.url,
+                    "score": task.score,
+                    "flags": flags,
+                }
+            )
 
         # Stats
         from .scorer import get_urgency_label
@@ -312,7 +321,9 @@ async def handle_help(user_id: str) -> dict:
     Returns:
         dict with 'text' (fallback) and 'blocks' (Block Kit)
     """
-    text = "👋 Ivan Task Manager - Commands: next, done, skip, tasks, morning, sync, help"
+    text = (
+        "👋 Ivan Task Manager - Commands: next, done, skip, tasks, morning, sync, help"
+    )
     blocks = [
         slack_blocks.section("👋 *Ivan Task Manager*"),
         slack_blocks.divider(),
@@ -478,8 +489,12 @@ def create_app():
             help_response = await handle_help(user_id)
             await say(
                 text="🤔 I didn't understand that. Here's what I can do:",
-                blocks=[slack_blocks.section("🤔 I didn't understand that. Here's what I can do:")] +
-                       help_response.get("blocks", []),
+                blocks=[
+                    slack_blocks.section(
+                        "🤔 I didn't understand that. Here's what I can do:"
+                    )
+                ]
+                + help_response.get("blocks", []),
                 thread_ts=thread_ts,
             )
 

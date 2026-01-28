@@ -113,7 +113,9 @@ class TestBotHandlers:
         assert "text" in result
         assert "blocks" in result
         # Help text should mention commands
-        assert "next" in result["text"].lower() or "next" in str(result["blocks"]).lower()
+        assert (
+            "next" in result["text"].lower() or "next" in str(result["blocks"]).lower()
+        )
 
 
 class TestBlockKitFormatting:
