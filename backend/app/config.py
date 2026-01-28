@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     slack_app_token: str = ""
     slack_ivan_user_id: str = "U084S552VRD"
 
+    # Writer settings
+    clickup_complete_status: str = "complete"
+
+    # Webhook secrets (for signature verification)
+    clickup_webhook_secret: str = ""
+    github_webhook_secret: str = ""
+
     # Scheduling
     morning_briefing_time: str = "07:00"
     quiet_hours_start: str = "22:00"
