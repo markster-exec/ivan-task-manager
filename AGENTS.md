@@ -19,9 +19,22 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 | `docs/` | Documentation with YAML front matter |
 | `docs/plans/` | Product vision and design documents |
 
+## Context Recovery
+
+**BEFORE ANY WORK, read these in order:**
+
+1. `docs/plans/2026-01-28-phase-4-roadmap.md` — Current implementation plan with 5 sprints
+2. `docs/plans/2026-01-27-product-vision.md` — Overall product vision and architecture
+3. Check GitHub issues: `gh issue list --repo markster-exec/project-tracker --label "area:product" --state open`
+
+**Track progress on GitHub:**
+- Issues #24-28 in `markster-exec/project-tracker` track Phase 4 sprints
+- Update issue comments when starting/completing work
+- Reference issues in commits: `feat(bot): add links (project-tracker#24)`
+
 ## Workflow
 
-**Before starting:** Read `docs/plans/2026-01-27-product-vision.md` — the 4-layer architecture and entity-centric design.
+**Before starting:** Read Context Recovery section above.
 
 **Before finishing:** Update `CHANGELOG.md`, run tests, ensure CI passes.
 
@@ -29,12 +42,16 @@ Unified task management system that aggregates tasks from ClickUp and GitHub, pr
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| Phase 1 | **Complete** | Core (FastAPI, syncers, scoring, CLI) |
-| Phase 2 | **Complete** | Slack bot + notifications |
-| Phase 3 | **Complete** | Error handling, retry logic, CLI polish |
-| Phase 4+ | Planned | Entity awareness, project context |
+| Phase 1-3 | **Complete** | Core, Slack bot, error handling, CLI |
+| Phase 4A | Planned | Bot communication fix (links, threading) |
+| Phase 4B | Planned | Entity awareness (context for tasks) |
+| Phase 4C | Planned | Bidirectional sync (write to sources) |
+| Phase 4D | Planned | Rich Slack input (files, docs) |
+| Phase 4E | Planned | Image/screenshot processing |
 
-**Next priority:** Entity awareness (task-entity mapping, project deadlines)
+**Next:** Phase 4A — See `docs/plans/2026-01-28-phase-4-roadmap.md` for full spec.
+
+**GitHub Issues:** #24 (4A), #25 (4B), #26 (4C), #27 (4D), #28 (4E) in `markster-exec/project-tracker`
 
 ## Commands
 
