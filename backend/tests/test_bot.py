@@ -1,13 +1,12 @@
 """Tests for Slack bot functionality."""
 
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
-from datetime import date
+from unittest.mock import patch
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import Base, Task, CurrentTask
+from app.models import Base, Task
 
 
 # Create test database with thread safety
