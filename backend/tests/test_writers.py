@@ -81,13 +81,6 @@ class TestSourceWriterInterface:
         writer = GitHubWriter()
         assert isinstance(writer, SourceWriter)
 
-    @pytest.mark.asyncio
-    async def test_github_complete_not_implemented(self):
-        """GitHubWriter.complete raises NotImplementedError (stub)."""
-        writer = GitHubWriter()
-        with pytest.raises(NotImplementedError):
-            await writer.complete("456")
-
 
 class TestClickUpWriter:
     """Test ClickUpWriter."""
@@ -210,3 +203,129 @@ class TestClickUpWriter:
             assert result.success is True
             call_args = client.post.call_args
             assert call_args[1]["json"]["tags"] == ["client:mark-smith"]
+
+
+class TestGitHubWriter:
+    """Test GitHubWriter."""
+
+    @pytest.fixture
+    def writer(self):
+        """Create GitHubWriter with mocked settings."""
+        with patch("app.writers.github.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                github_token="test-token",
+                github_repo="test-owner/test-repo",
+            )
+            return GitHubWriter()
+
+    @pytest.mark.asyncio
+    async def test_complete_success(self, writer):
+        """Complete closes issue in GitHub."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = {"state": "open"}
+            mock_get_response.raise_for_status = MagicMock()
+
+            mock_patch_response = MagicMock()
+            mock_patch_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.get.return_value = mock_get_response
+            client.patch.return_value = mock_patch_response
+            mock_client.return_value = client
+
+            result = await writer.complete("123")
+
+            assert result.success is True
+            assert "GitHub" in result.message
+            client.patch.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_complete_already_closed(self, writer):
+        """Complete detects already-closed issue."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"state": "closed"}
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.get.return_value = mock_response
+            mock_client.return_value = client
+
+            result = await writer.complete("123")
+
+            assert result.success is True
+            assert result.conflict is True
+            assert result.current_state == "closed"
+            client.patch.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_complete_http_error(self, writer):
+        """Complete handles HTTP errors gracefully."""
+        with patch.object(writer, "_get_client") as mock_client:
+            client = AsyncMock()
+            error_response = MagicMock()
+            error_response.status_code = 404
+            client.get.side_effect = httpx.HTTPStatusError(
+                "Not found", request=MagicMock(), response=error_response
+            )
+            mock_client.return_value = client
+
+            result = await writer.complete("123")
+
+            assert result.success is False
+            assert "404" in result.message
+
+    @pytest.mark.asyncio
+    async def test_comment_success(self, writer):
+        """Comment adds comment to issue."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.post.return_value = mock_response
+            mock_client.return_value = client
+
+            result = await writer.comment("123", "Test comment")
+
+            assert result.success is True
+            client.post.assert_called_once()
+            call_args = client.post.call_args
+            assert "comments" in call_args[0][0]
+            assert call_args[1]["json"]["body"] == "Test comment"
+
+    @pytest.mark.asyncio
+    async def test_create_success(self, writer):
+        """Create creates issue in GitHub."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"number": 456}
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.post.return_value = mock_response
+            mock_client.return_value = client
+
+            result = await writer.create("Test Issue", description="Test body")
+
+            assert result.success is True
+            assert result.source_id == "456"
+
+    @pytest.mark.asyncio
+    async def test_create_with_entity_tag(self, writer):
+        """Create prepends entity tag to title when entity_id provided."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.json.return_value = {"number": 789}
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.post.return_value = mock_response
+            mock_client.return_value = client
+
+            result = await writer.create("Test Issue", entity_id="acme-corp")
+
+            assert result.success is True
+            call_args = client.post.call_args
+            assert call_args[1]["json"]["title"] == "[CLIENT:acme-corp] Test Issue"
