@@ -1,7 +1,18 @@
+---
+id: ivan-task-manager-design
+title: Ivan Task Manager - Design Document
+type: note
+status: completed
+owner: ivan
+created: 2026-01-27
+updated: 2026-01-28
+tags: [design, architecture, approved]
+---
+
 # Ivan Task Manager - Design Document
 
 **Date:** 2026-01-27
-**Status:** Approved
+**Status:** Approved (Phase 1-3 Implemented)
 
 ## Problem Statement
 
@@ -146,12 +157,57 @@ ivan blocked   # What you're waiting on (future)
 | `/sync` | POST | Force sync |
 | `/morning` | GET | Morning briefing data |
 
+## Implementation Status
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 1 | ✅ Complete | Core (FastAPI, syncers, scoring, CLI) |
+| Phase 2 | ✅ Complete | Slack bot + notifications |
+| Phase 3 | ✅ Complete | Error handling, retry logic, CLI polish |
+| Phase 4+ | Planned | Entity awareness, project context |
+
+## Slack Bot (Phase 2)
+
+The Slack bot enables natural language interaction:
+
+**Commands:**
+- `next` / "what should I work on?"
+- `done` / "finished"
+- `skip` / "later"
+- `tasks` / "show my tasks"
+- `morning` / "briefing"
+- `sync` / "refresh"
+- `help`
+
+**Features:**
+- Socket Mode for real-time messaging
+- Regex pattern matching for command recognition
+- Azure OpenAI intent classification fallback
+- Hourly digest job (runs at :30 each hour)
+
+## Error Handling (Phase 3)
+
+**Error Categories:**
+- `auth_error` - Authentication failed
+- `permission_error` - Permission denied
+- `not_found` - Resource not found
+- `rate_limit` - Rate limit exceeded
+- `timeout` - Request timed out
+- `connection_error` - Network connectivity issue
+- `server_error` - Server-side error
+
+**Retry Logic:**
+- Exponential backoff (1s → 2s → 4s, max 30s)
+- Max 3 retries for transient errors
+- Immediate failure for non-transient errors (auth, permission)
+- Graceful degradation (one source failure doesn't block others)
+
 ## Future Enhancements
 
-1. **Phase 2:** Slack bot for natural language queries
-2. **Phase 3:** HubSpot integration for deal context
-3. **Phase 4:** Calendar integration for meeting-aware scheduling
-4. **Phase 5:** AI summarization of task context
+1. **Phase 4:** Entity awareness (task-entity mapping)
+2. **Phase 5:** HubSpot integration for deal context
+3. **Phase 6:** Calendar integration for meeting-aware scheduling
+4. **Phase 7:** AI summarization of task context
 
 ## Tech Stack
 

@@ -1,3 +1,14 @@
+---
+id: ivan-task-manager-overview
+title: Ivan Task Manager - Overview
+type: reference
+status: active
+owner: ivan
+created: 2026-01-27
+updated: 2026-01-27
+tags: [task-management, prioritization, slack, clickup, github]
+---
+
 # Ivan Task Manager
 
 A unified task management system that aggregates tasks from ClickUp and GitHub, provides intelligent prioritization, and delivers actionable notifications via Slack.
@@ -5,10 +16,11 @@ A unified task management system that aggregates tasks from ClickUp and GitHub, 
 ## Overview
 
 Ivan Task Manager solves the "multiple task systems" problem by:
-1. Syncing tasks from ClickUp and GitHub hourly
+1. Syncing tasks from ClickUp and GitHub hourly (with retry logic)
 2. Scoring tasks by revenue impact, blocking status, and urgency
 3. Surfacing the single most important task to work on
 4. Sending morning briefings and urgent task alerts via Slack
+5. Providing an interactive Slack bot for natural language queries
 
 ## Quick Start
 
@@ -36,6 +48,17 @@ ivan sync
 # Show who's waiting on you
 ivan blocking
 ```
+
+### Slack Bot
+
+DM the bot or mention it:
+- `next` / "what should I work on?"
+- `done` / "finished"
+- `skip` / "later"
+- `tasks` / "show my tasks"
+- `morning` / "briefing"
+- `sync` / "refresh"
+- `help`
 
 ### API Endpoints
 
@@ -76,7 +99,7 @@ Score = (Revenue × 1000) + (Blocking × 500 × count) + (Urgency × 100) + Rece
                    ▼                           │
          ┌─────────────────┐                   │
          │   Syncer        │                   │
-         │   (hourly)      │                   │
+         │ (hourly+retry)  │                   │
          └────────┬────────┘                   │
                   ▼                            │
          ┌─────────────────┐                   │
@@ -89,11 +112,11 @@ Score = (Revenue × 1000) + (Blocking × 500 × count) + (Urgency × 100) + Rece
          │   (priority)    │                   │
          └────────┬────────┘                   │
                   │                            │
-       ┌──────────┴──────────┐                 │
-       ▼                     ▼                 ▼
-┌─────────────┐     ┌─────────────┐   ┌─────────────┐
-│  CLI (ivan) │     │  FastAPI    │   │  Notifier   │
-└─────────────┘     └─────────────┘   └─────────────┘
+       ┌──────────┼──────────┐                 │
+       ▼          ▼          ▼                 ▼
+┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐
+│ CLI (ivan)│ │ FastAPI   │ │ Notifier  │ │ Slack Bot │
+└───────────┘ └───────────┘ └───────────┘ └───────────┘
 ```
 
 ## Configuration
@@ -107,6 +130,7 @@ All configuration via environment variables:
 | `GITHUB_TOKEN` | GitHub personal access token | Required |
 | `GITHUB_REPO` | GitHub repo (owner/name) | Required |
 | `SLACK_BOT_TOKEN` | Slack bot token | Required |
+| `SLACK_APP_TOKEN` | Slack app token (Socket Mode) | Required for bot |
 | `SLACK_IVAN_USER_ID` | Slack user ID for DMs | Required |
 | `DATABASE_URL` | Database connection string | sqlite:///./tasks.db |
 | `SYNC_INTERVAL_MINUTES` | Sync frequency | 60 |
@@ -116,7 +140,9 @@ All configuration via environment variables:
 
 ## Deployment
 
-Runs on Railway with Docker. See `Dockerfile` for build configuration.
+Runs on Railway with Docker.
+
+**Production URL:** https://backend-production-7a52.up.railway.app
 
 ```bash
 # Local development

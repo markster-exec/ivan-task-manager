@@ -21,7 +21,21 @@ If the vision document doesn't exist or has been superseded, check for newer fil
 
 ---
 
+## Current Status
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 1 | **Complete** | Core (FastAPI, syncers, scoring, CLI) |
+| Phase 2 | **Complete** | Slack bot + notifications |
+| Phase 3 | **Complete** | Error handling, retry logic, CLI polish |
+| Phase 4+ | Planned | Entity awareness, project context |
+
+**Next priority:** Entity awareness (task-entity mapping, project deadlines)
+
+---
+
 ## Standards
+
 1. Produce production-ready code.
 2. Write tests for every change (skip only for docs/config-only updates and note why).
 3. Run the relevant tests for every change (if no tests exist, state that explicitly).
@@ -33,6 +47,7 @@ If the vision document doesn't exist or has been superseded, check for newer fil
 9. The dev-docs MCP tool must be used to look up relevant API/documentation when applicable; use list_metadata to review available datasets, search to locate material, and get_chunk to retrieve the exact passages.
 
 ## Commit Message Format
+
 Use `<type>(<scope>): <summary>` where:
 - `type` is one of: feat, fix, docs, test, chore, refactor, perf, ci
 - `scope` is optional and should be a short noun
@@ -47,17 +62,37 @@ Use `<type>(<scope>): <summary>` where:
 - Deployment: Docker containers on Railway
 
 ### Key Files
-- `docs/plans/2026-01-27-product-vision.md` — **Product vision (read first!)**
-- `backend/app/main.py` — FastAPI application
-- `backend/app/syncer.py` — ClickUp/GitHub task sync
-- `backend/app/scorer.py` — Task prioritization logic
-- `backend/app/notifier.py` — Slack notifications
-- `cli/ivan/__init__.py` — CLI client
+
+| File | Purpose |
+|------|---------|
+| `docs/plans/2026-01-27-product-vision.md` | **Product vision (read first!)** |
+| `backend/app/main.py` | FastAPI application + scheduled jobs |
+| `backend/app/bot.py` | Slack bot listener (Socket Mode) |
+| `backend/app/syncer.py` | ClickUp/GitHub sync with retry logic |
+| `backend/app/scorer.py` | Task prioritization logic |
+| `backend/app/notifier.py` | Slack notifications |
+| `backend/app/models.py` | SQLAlchemy models |
+| `cli/ivan/__init__.py` | CLI client |
 
 ### Testing
-- Run tests: `pytest backend/tests/`
-- Lint: `ruff check backend/`
-- Format: `black backend/`
+
+```bash
+# Run tests (29 passing)
+pytest backend/tests/ -v
+
+# Lint
+ruff check backend/
+
+# Format
+black backend/
+```
 
 ### Environment Variables
+
 See `.env.example` for required configuration.
+
+### Deployment
+
+- **Production URL:** https://backend-production-7a52.up.railway.app
+- **CI:** GitHub Actions (lint, test, build)
+- All changes must pass CI before merge.

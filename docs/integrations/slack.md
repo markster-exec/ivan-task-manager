@@ -1,13 +1,56 @@
+---
+id: ivan-task-manager-slack-integration
+title: Ivan Task Manager - Slack Integration
+type: reference
+status: active
+owner: ivan
+created: 2026-01-27
+updated: 2026-01-28
+tags: [slack, integration, bot, notifications]
+---
+
 # Slack Integration
 
 ## Overview
 
 Slack integration enables:
+- **Interactive bot** for natural language task queries
+- **Notifications** for urgent tasks, morning briefings, hourly digests
 - Pinging team members about tasks
 - Posting task updates to channels
-- Searching conversation history for context
 
-## Options
+## Current Implementation (bot.py)
+
+The Slack bot is fully implemented using Socket Mode for real-time messaging.
+
+**Commands:**
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `next` | "what should I work on?", "what's next?" | Show highest priority task |
+| `done` | "finished", "completed", "✓" | Mark current task complete |
+| `skip` | "later", "skip this" | Skip current task |
+| `tasks` | "show my tasks", "list tasks" | List all tasks sorted by priority |
+| `morning` | "briefing", "daily brief" | Morning briefing with top 3 tasks |
+| `sync` | "refresh", "update" | Force sync from sources |
+| `help` | | Show available commands |
+
+**Features:**
+- Socket Mode (no public URL required)
+- Regex pattern matching for command recognition
+- Azure OpenAI intent classification fallback for natural language
+- Hourly digest job (runs at :30 each hour)
+- Instant alerts for high-priority tasks (score >= 1000)
+- Quiet hours support (22:00 - 07:00)
+- Duplicate notification prevention via message hashing
+
+**Environment Variables:**
+```
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...
+SLACK_IVAN_USER_ID=U084S552VRD
+```
+
+## Historical Options
 
 ### Option 1: Slack MCP Server (Recommended)
 
@@ -88,14 +131,24 @@ curl -X POST https://slack.com/api/chat.postMessage \
 - Works directly with Claude Code
 - Active open-source project
 
-## Next Steps
+## Setup Complete ✅
 
-1. [ ] Create Slack App at api.slack.com/apps
-2. [ ] Add required scopes
-3. [ ] Install to workspace
-4. [ ] Store bot token securely
-5. [ ] Create `slack_manager.rb` script (similar to clickup_manager.rb)
-6. [ ] Test sending messages
+1. [x] Create Slack App at api.slack.com/apps
+2. [x] Add required scopes (chat:write, channels:read, users:read, im:write, app_mentions:read)
+3. [x] Enable Socket Mode
+4. [x] Install to workspace
+5. [x] Store bot token securely
+6. [x] Implement bot.py with command handlers
+7. [x] Add Azure OpenAI intent classification
+8. [x] Implement notifier.py for scheduled notifications
+9. [x] Test all commands
+
+## Future Enhancements
+
+- [ ] Bidirectional sync (update tasks via Slack commands)
+- [ ] Thread-based task discussions
+- [ ] Interactive buttons for task actions
+- [ ] Channel-based project updates
 
 ## Resources
 

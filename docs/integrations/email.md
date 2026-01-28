@@ -1,3 +1,14 @@
+---
+id: ivan-task-manager-email-integration
+title: Ivan Task Manager - Email Integration (Gmail)
+type: reference
+status: planned
+owner: ivan
+created: 2026-01-27
+updated: 2026-01-28
+tags: [email, gmail, integration, planned]
+---
+
 # Email Integration (Gmail)
 
 ## Overview

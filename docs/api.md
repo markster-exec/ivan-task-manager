@@ -1,9 +1,21 @@
+---
+id: ivan-task-manager-api
+title: Ivan Task Manager - API Reference
+type: reference
+status: active
+owner: ivan
+created: 2026-01-27
+updated: 2026-01-27
+tags: [api, rest, fastapi]
+---
+
 # API Reference
 
 ## Base URL
 
 - Local: `http://localhost:8000`
-- Production: Set via `IVAN_API_URL` environment variable
+- Production: `https://backend-production-7a52.up.railway.app`
+- CLI default: Set via `IVAN_API_URL` environment variable
 
 ## Endpoints
 
@@ -144,7 +156,7 @@ Skips the current task and returns the next one.
 POST /sync
 ```
 
-Triggers immediate sync from all sources (ClickUp, GitHub).
+Triggers immediate sync from all sources (ClickUp, GitHub) with retry logic.
 
 **Response:**
 ```json
@@ -154,6 +166,18 @@ Triggers immediate sync from all sources (ClickUp, GitHub).
     "clickup": 12,
     "github": 5,
     "errors": []
+  }
+}
+```
+
+**Response (with errors):**
+```json
+{
+  "success": true,
+  "results": {
+    "clickup": 0,
+    "github": 5,
+    "errors": ["ClickUp: Authentication failed - check API token"]
   }
 }
 ```
@@ -204,3 +228,17 @@ Common HTTP status codes:
 - `400` - Bad request (e.g., no current task)
 - `404` - Resource not found
 - `500` - Internal server error
+
+## Sync Error Categories
+
+The sync endpoint categorizes errors for better debugging:
+
+| Error Type | Description |
+|------------|-------------|
+| `auth_error` | Authentication failed - check API token |
+| `permission_error` | Permission denied - check API permissions |
+| `not_found` | Resource not found - check list/repo ID |
+| `rate_limit` | Rate limit exceeded - will retry later |
+| `timeout` | Request timed out - network may be slow |
+| `connection_error` | Could not connect - check network |
+| `server_error` | Server error - source may be down |
