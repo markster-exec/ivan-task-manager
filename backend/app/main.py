@@ -4,13 +4,15 @@ A unified task management system that aggregates tasks from ClickUp and GitHub,
 provides intelligent prioritization, and delivers actionable notifications.
 """
 
+import hashlib
+import hmac
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from pydantic import BaseModel
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
@@ -767,3 +769,127 @@ async def create_task_in_source(
         message=result.message,
         source_id=result.source_id,
     )
+
+
+# =============================================================================
+# Webhook Receivers (Real-time Updates)
+# =============================================================================
+
+
+def verify_github_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify GitHub webhook signature."""
+    if not secret:
+        return True  # Skip verification if no secret configured
+    expected = (
+        "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    )
+    return hmac.compare_digest(expected, signature)
+
+
+def verify_clickup_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verify ClickUp webhook signature."""
+    if not secret:
+        return True  # Skip verification if no secret configured
+    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+@app.post("/webhooks/github")
+async def github_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle GitHub webhook events."""
+    # Read body before parsing (for signature verification)
+    body = await request.body()
+
+    # Verify signature
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not verify_github_signature(body, signature, settings.github_webhook_secret):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # Parse payload
+    import json
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    event = request.headers.get("X-GitHub-Event", "")
+    action = payload.get("action", "")
+
+    # Handle issue events
+    if event == "issues":
+        issue = payload.get("issue", {})
+        issue_number = str(issue.get("number", ""))
+        task_id = f"github:{issue_number}"
+
+        task = db.query(Task).filter(Task.id == task_id).first()
+
+        if action == "closed" and task:
+            task.status = "done"
+            task.updated_at = datetime.utcnow()
+            db.commit()
+            logger.info(f"GitHub webhook: marked {task_id} as done")
+
+        elif action == "reopened" and task:
+            task.status = "todo"
+            task.updated_at = datetime.utcnow()
+            db.commit()
+            logger.info(f"GitHub webhook: reopened {task_id}")
+
+        elif action == "edited" and task:
+            task.title = issue.get("title", task.title)
+            task.description = issue.get("body", task.description)
+            task.updated_at = datetime.utcnow()
+            db.commit()
+            logger.info(f"GitHub webhook: updated {task_id}")
+
+    return {"status": "ok", "event": event, "action": action}
+
+
+@app.post("/webhooks/clickup")
+async def clickup_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle ClickUp webhook events."""
+    # Read body before parsing (for signature verification)
+    body = await request.body()
+
+    # Verify signature
+    signature = request.headers.get("X-Signature", "")
+    if not verify_clickup_signature(body, signature, settings.clickup_webhook_secret):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # Parse payload
+    import json
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    event = payload.get("event", "")
+    task_data = payload.get("task_id") or payload.get("task", {}).get("id")
+
+    if not task_data:
+        return {"status": "ok", "event": event, "message": "No task data"}
+
+    task_id = f"clickup:{task_data}"
+    task = db.query(Task).filter(Task.id == task_id).first()
+
+    if event == "taskStatusUpdated" and task:
+        history = payload.get("history_items", [{}])
+        if history:
+            new_status = history[0].get("after", {}).get("status", "")
+            if new_status.lower() in ["complete", "closed", "done"]:
+                task.status = "done"
+            else:
+                task.status = "todo"
+            task.updated_at = datetime.utcnow()
+            db.commit()
+            logger.info(f"ClickUp webhook: {task_id} status -> {task.status}")
+
+    elif event == "taskUpdated" and task:
+        # General task update
+        task.updated_at = datetime.utcnow()
+        db.commit()
+        logger.info(f"ClickUp webhook: updated {task_id}")
+
+    return {"status": "ok", "event": event}

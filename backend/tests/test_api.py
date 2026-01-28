@@ -1,5 +1,6 @@
 """Tests for API endpoints."""
 
+import json
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -57,6 +58,8 @@ def client():
         complete_task_in_source,
         add_comment_to_source,
         create_task_in_source,
+        github_webhook,
+        clickup_webhook,
         get_db,
     )
 
@@ -76,6 +79,8 @@ def client():
     test_app.post("/tasks/{task_id}/complete")(complete_task_in_source)
     test_app.post("/tasks/{task_id}/comment")(add_comment_to_source)
     test_app.post("/tasks")(create_task_in_source)
+    test_app.post("/webhooks/github")(github_webhook)
+    test_app.post("/webhooks/clickup")(clickup_webhook)
 
     # Override the database dependency
     test_app.dependency_overrides[get_db] = get_test_db
@@ -398,3 +403,198 @@ class TestCreateTaskInSource:
             json={"title": "Task"},
         )
         assert response.status_code == 400
+
+
+class TestGitHubWebhook:
+    """Test POST /webhooks/github endpoint."""
+
+    def test_github_issue_closed(self, client):
+        """GitHub webhook closes task when issue closed."""
+        # Add a task
+        db = TestSessionLocal()
+        task = Task(
+            id="github:42",
+            source="github",
+            title="Test Issue",
+            status="todo",
+            assignee="ivan",
+            url="http://github.com/test/42",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        payload = {
+            "action": "closed",
+            "issue": {"number": 42, "title": "Test Issue"},
+        }
+
+        # No signature verification (secret not configured)
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.github_webhook_secret = ""
+
+            response = client.post(
+                "/webhooks/github",
+                json=payload,
+                headers={"X-GitHub-Event": "issues"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["event"] == "issues"
+            assert data["action"] == "closed"
+
+        # Verify task was marked done
+        db = TestSessionLocal()
+        updated_task = db.query(Task).filter(Task.id == "github:42").first()
+        assert updated_task.status == "done"
+        db.close()
+
+    def test_github_issue_reopened(self, client):
+        """GitHub webhook reopens task when issue reopened."""
+        db = TestSessionLocal()
+        task = Task(
+            id="github:43",
+            source="github",
+            title="Reopened Issue",
+            status="done",
+            assignee="ivan",
+            url="http://github.com/test/43",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        payload = {
+            "action": "reopened",
+            "issue": {"number": 43},
+        }
+
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.github_webhook_secret = ""
+
+            response = client.post(
+                "/webhooks/github",
+                json=payload,
+                headers={"X-GitHub-Event": "issues"},
+            )
+            assert response.status_code == 200
+
+        db = TestSessionLocal()
+        updated_task = db.query(Task).filter(Task.id == "github:43").first()
+        assert updated_task.status == "todo"
+        db.close()
+
+    def test_github_invalid_signature(self, client):
+        """GitHub webhook rejects invalid signature."""
+        payload = {"action": "closed", "issue": {"number": 1}}
+        body = json.dumps(payload).encode()
+
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.github_webhook_secret = "test-secret"
+
+            response = client.post(
+                "/webhooks/github",
+                content=body,
+                headers={
+                    "X-GitHub-Event": "issues",
+                    "X-Hub-Signature-256": "sha256=invalid",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 401
+
+
+class TestClickUpWebhook:
+    """Test POST /webhooks/clickup endpoint."""
+
+    def test_clickup_task_completed(self, client):
+        """ClickUp webhook marks task done when status changes to complete."""
+        db = TestSessionLocal()
+        task = Task(
+            id="clickup:abc123",
+            source="clickup",
+            title="ClickUp Task",
+            status="todo",
+            assignee="ivan",
+            url="http://clickup.com/abc123",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        payload = {
+            "event": "taskStatusUpdated",
+            "task_id": "abc123",
+            "history_items": [{"after": {"status": "complete"}}],
+        }
+
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.clickup_webhook_secret = ""
+
+            response = client.post("/webhooks/clickup", json=payload)
+            assert response.status_code == 200
+            data = response.json()
+            assert data["event"] == "taskStatusUpdated"
+
+        db = TestSessionLocal()
+        updated_task = db.query(Task).filter(Task.id == "clickup:abc123").first()
+        assert updated_task.status == "done"
+        db.close()
+
+    def test_clickup_task_reopened(self, client):
+        """ClickUp webhook reopens task when status changes back."""
+        db = TestSessionLocal()
+        task = Task(
+            id="clickup:def456",
+            source="clickup",
+            title="Reopened ClickUp",
+            status="done",
+            assignee="ivan",
+            url="http://clickup.com/def456",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        db.commit()
+        db.close()
+
+        payload = {
+            "event": "taskStatusUpdated",
+            "task_id": "def456",
+            "history_items": [{"after": {"status": "in progress"}}],
+        }
+
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.clickup_webhook_secret = ""
+
+            response = client.post("/webhooks/clickup", json=payload)
+            assert response.status_code == 200
+
+        db = TestSessionLocal()
+        updated_task = db.query(Task).filter(Task.id == "clickup:def456").first()
+        assert updated_task.status == "todo"
+        db.close()
+
+    def test_clickup_invalid_signature(self, client):
+        """ClickUp webhook rejects invalid signature."""
+        payload = {"event": "taskUpdated", "task_id": "xyz"}
+        body = json.dumps(payload).encode()
+
+        with patch("app.main.settings") as mock_settings:
+            mock_settings.clickup_webhook_secret = "test-secret"
+
+            response = client.post(
+                "/webhooks/clickup",
+                content=body,
+                headers={
+                    "X-Signature": "invalid",
+                    "Content-Type": "application/json",
+                },
+            )
+            assert response.status_code == 401
