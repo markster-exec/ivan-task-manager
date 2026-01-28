@@ -1,7 +1,7 @@
 """Tests for notifier event message formatting."""
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from app.events import Event, EventType
 from app.notifier import SlackNotifier
@@ -98,4 +98,25 @@ class TestEventMessageFormatting:
         message = notifier.format_event_message(event, mock_task)
 
         assert "✅" in message
-        assert "resolved" in message.lower() or "unblocked" in message.lower()
+        assert "resolved" in message.lower()
+        assert "proceed" in message.lower()
+
+    @pytest.mark.asyncio
+    async def test_send_event_notification_calls_send_dm(self, notifier, mock_task):
+        """send_event_notification should call send_dm with formatted message."""
+        event = Event(
+            trigger=EventType.ASSIGNED,
+            task_id=mock_task.id,
+            fingerprint="assignee=ivan",
+            context={"prev_assignee": "tamas"},
+        )
+
+        notifier.send_dm = AsyncMock(return_value=True)
+        result = await notifier.send_event_notification(event, mock_task)
+
+        assert result is True
+        notifier.send_dm.assert_called_once()
+        call_args = notifier.send_dm.call_args
+        assert "assigned" in call_args[0][0].lower()
+        assert call_args[1]["notification_type"] == "assigned"
+        assert call_args[1]["task_id"] == mock_task.id
