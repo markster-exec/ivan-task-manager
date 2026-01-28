@@ -89,3 +89,32 @@ def overdue_task():
         is_blocking=[],
         last_activity=datetime.utcnow() - timedelta(days=3),
     )
+
+
+@pytest.fixture
+def temp_entities_dir():
+    """Create temporary entities directory for testing."""
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        entities_path = Path(tmpdir)
+
+        (entities_path / "mark-smith.yaml").write_text("""
+id: mark-smith
+type: person
+name: Mark Smith
+created: 2026-01-28
+updated: 2026-01-28
+company: AI Branding Academy
+relationship_type: client
+workstreams:
+  - id: workshop
+    name: Workshop
+    status: active
+    deadline: 2026-02-15
+channels:
+  gdoc: "1byTVc..."
+""")
+
+        yield entities_path

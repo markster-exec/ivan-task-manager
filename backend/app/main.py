@@ -16,7 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .entity_loader import load_entities
+from .entity_loader import get_entity, get_all_entities, load_entities, find_entity_by_name
 from .models import Task, CurrentTask, DigestState, init_db, get_db, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
@@ -251,6 +251,44 @@ class ActionResponse(BaseModel):
     success: bool
     message: str
     next_task: Optional[TaskResponse]
+
+
+class EntitySummaryResponse(BaseModel):
+    id: str
+    name: str
+    type: str
+    company: Optional[str]
+    relationship_type: Optional[str]
+    priority: int
+    active_workstream: Optional[str]
+
+
+class WorkstreamResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    deadline: Optional[str]
+    milestone: Optional[str]
+    revenue_potential: Optional[str]
+
+
+class EntityDetailResponse(BaseModel):
+    id: str
+    name: str
+    type: str
+    created: str
+    updated: str
+    tags: list[str]
+    company: Optional[str]
+    email: Optional[str]
+    linkedin: Optional[str]
+    phone: Optional[str]
+    relationship_type: Optional[str]
+    priority: int
+    intention: Optional[str]
+    workstreams: list[WorkstreamResponse]
+    channels: dict[str, str]
+    context_summary: Optional[str]
 
 
 # =============================================================================
@@ -491,3 +529,76 @@ async def get_morning_briefing(db: Session = Depends(get_db)):
             "blocking": list(blocking),
         },
     }
+
+
+# =============================================================================
+# Entity Routes
+# =============================================================================
+
+
+@app.get("/entities", response_model=list[EntitySummaryResponse])
+async def list_entities():
+    """List all entities with summary info."""
+    entities = get_all_entities()
+    return [
+        EntitySummaryResponse(
+            id=e.id,
+            name=e.name,
+            type=e.type,
+            company=e.company,
+            relationship_type=e.relationship_type,
+            priority=e.get_priority(),
+            active_workstream=e.get_active_workstream().name if e.get_active_workstream() else None,
+        )
+        for e in entities
+    ]
+
+
+@app.get("/entities/{entity_id}", response_model=EntityDetailResponse)
+async def get_entity_detail(entity_id: str):
+    """Get full entity details."""
+    entity = get_entity(entity_id)
+    if not entity:
+        # Try fuzzy match
+        entity = find_entity_by_name(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail=f"Entity '{entity_id}' not found")
+
+    return EntityDetailResponse(
+        id=entity.id,
+        name=entity.name,
+        type=entity.type,
+        created=entity.created.isoformat(),
+        updated=entity.updated.isoformat(),
+        tags=entity.tags,
+        company=entity.company,
+        email=entity.email,
+        linkedin=entity.linkedin,
+        phone=entity.phone,
+        relationship_type=entity.relationship_type,
+        priority=entity.get_priority(),
+        intention=entity.intention,
+        workstreams=[
+            WorkstreamResponse(
+                id=ws.id,
+                name=ws.name,
+                status=ws.status,
+                deadline=ws.deadline.isoformat() if ws.deadline else None,
+                milestone=ws.milestone,
+                revenue_potential=ws.revenue_potential,
+            )
+            for ws in entity.workstreams
+        ],
+        channels=entity.channels,
+        context_summary=entity.context_summary,
+    )
+
+
+@app.post("/entities/reload")
+async def reload_entities():
+    """Reload entities from YAML files."""
+    entities_path = Path(settings.entities_dir)
+    if not entities_path.is_absolute():
+        entities_path = Path(__file__).parent.parent.parent / settings.entities_dir
+    load_entities(entities_path)
+    return {"message": f"Reloaded {len(get_all_entities())} entities"}
