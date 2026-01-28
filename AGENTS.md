@@ -44,8 +44,10 @@ pytest backend/tests/ -v
 ```
 Tests MUST pass before committing. Never push broken code.
 
-### 5. Update STATE.md
-Record what you did and what's next. This is MANDATORY at session end.
+### 5. Update docs
+- **STATE.md** — Always update (what you did, what's next)
+- **CHANGELOG.md** — If behavior changed
+- **README.md** — If user-facing changes (new features, setup, API)
 
 ### 6. Commit if tests pass
 Ivan is not a dev. If CI passes and no manual/UI testing needed, commit and push.
