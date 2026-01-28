@@ -2,14 +2,16 @@
 """Ivan Task Manager CLI.
 
 Usage:
-    ivan next      - Show highest priority task
-    ivan done      - Mark current task complete, show next
-    ivan skip      - Skip current task, show next
-    ivan tasks     - List all tasks sorted by priority
-    ivan morning   - Show morning briefing
-    ivan sync      - Force sync from all sources
-    ivan blocking  - Show who's waiting on you
-    ivan blocked   - Show what you're waiting on
+    ivan next                  - Show highest priority task
+    ivan done [--comment TEXT] - Mark current task complete, optionally add comment
+    ivan skip                  - Skip current task, show next
+    ivan comment TEXT          - Add comment to current task
+    ivan create TITLE          - Create new task in ClickUp
+    ivan tasks                 - List all tasks sorted by priority
+    ivan morning               - Show morning briefing
+    ivan sync                  - Force sync from all sources
+    ivan blocking              - Show who's waiting on you
+    ivan blocked               - Show what you're waiting on
 """
 
 import os
@@ -158,14 +160,24 @@ def next():
 
 
 @cli.command()
-def done():
+@click.option("--comment", "-c", help="Add a completion comment")
+def done(comment: Optional[str]):
     """Mark current task as complete and show next."""
     with console.status("[bold blue]Marking task complete...", spinner="dots"):
         data = api_post("/done")
 
     if data.get("success"):
+        completed_task_id = data.get("completed_task_id")
+
+        # Add comment to the COMPLETED task (not the next one)
+        if comment and completed_task_id:
+            with console.status("[bold blue]Adding comment...", spinner="dots"):
+                api_post(f"/tasks/{completed_task_id}/comment", {"text": comment})
+
         console.print()
         console.print(f"[green]✓[/green] {data.get('message', 'Task completed')}")
+        if comment:
+            console.print(f"[dim]Comment added: {comment}[/dim]")
 
         if data.get("next_task"):
             console.print()
@@ -205,6 +217,61 @@ def skip():
         console.print(f"[red]⚠️  {data.get('message', 'Could not skip task')}[/red]")
         console.print("[dim]Tip: Run [bold]ivan next[/bold] first to get a task.[/dim]")
         console.print()
+
+
+@cli.command()
+@click.argument("text")
+def comment(text: str):
+    """Add comment to current task."""
+    # Get current task ID
+    with console.status("[bold blue]Getting current task...", spinner="dots"):
+        data = api_get("/next")
+
+    if not data.get("task"):
+        console.print()
+        console.print("[red]⚠️  No current task to comment on[/red]")
+        console.print("[dim]Tip: Run [bold]ivan next[/bold] first to get a task.[/dim]")
+        console.print()
+        return
+
+    task_id = data["task"]["id"]
+
+    with console.status("[bold blue]Adding comment...", spinner="dots"):
+        result = api_post(f"/tasks/{task_id}/comment", {"text": text})
+
+    console.print()
+    if result.get("success"):
+        console.print(f"[green]✓[/green] Comment added to {data['task']['title'][:40]}...")
+    else:
+        console.print(f"[red]⚠️  {result.get('message', 'Could not add comment')}[/red]")
+    console.print()
+
+
+@cli.command()
+@click.argument("title")
+@click.option("--description", "-d", help="Task description")
+@click.option("--entity", "-e", help="Entity ID to tag")
+@click.option("--source", "-s", default="clickup", help="Source: clickup or github")
+def create(title: str, description: Optional[str], entity: Optional[str], source: str):
+    """Create new task in source system."""
+    with console.status(f"[bold blue]Creating task in {source}...", spinner="dots"):
+        result = api_post(
+            f"/tasks?source={source}",
+            {
+                "title": title,
+                "description": description,
+                "entity_id": entity,
+            },
+        )
+
+    console.print()
+    if result.get("success"):
+        console.print(f"[green]✓[/green] {result.get('message', 'Task created')}")
+        if result.get("source_id"):
+            console.print(f"[dim]ID: {result['source_id']}[/dim]")
+    else:
+        console.print(f"[red]⚠️  {result.get('message', 'Could not create task')}[/red]")
+    console.print()
 
 
 @cli.command()
