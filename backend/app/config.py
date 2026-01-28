@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     env: str = "development"
 
+    # Entity settings
+    entities_dir: str = "entities"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

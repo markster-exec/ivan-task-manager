@@ -7,6 +7,7 @@ provides intelligent prioritization, and delivers actionable notifications.
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -15,6 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .entity_loader import load_entities
 from .models import Task, CurrentTask, DigestState, init_db, get_db, SessionLocal
 from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
@@ -158,6 +160,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Ivan Task Manager...")
     init_db()
+
+    # Load entities
+    entities_path = Path(settings.entities_dir)
+    if not entities_path.is_absolute():
+        # Relative to project root (parent of backend/)
+        entities_path = Path(__file__).parent.parent.parent / settings.entities_dir
+    load_entities(entities_path)
+    logger.info(f"Loaded entities from {entities_path}")
 
     # Schedule jobs
     scheduler.add_job(
