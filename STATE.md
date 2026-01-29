@@ -4,11 +4,11 @@
 
 ## Last Updated
 
-2026-01-29 12:30 UTC
+2026-01-29 21:30 UTC
 
 ## Current Phase
 
-Phase 4F — Event-driven notifications (complete)
+Ticket Processor Implementation — **6/12 tasks complete**
 
 ## Active Work
 
@@ -17,53 +17,59 @@ Phase 4F — Event-driven notifications (complete)
 | Branch | `main` |
 | PR | None |
 | Issue | None |
-| Status | Phase 4F complete, ready for next phase |
+| Status | Ticket Processor implementation in progress |
 
-## Phase Roadmap
+## Ticket Processor Progress
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1-3 | Complete | Core, Slack bot, error handling, CLI |
-| Phase 4A | **Complete** | Bot communication fix (links, threading) |
-| Phase 4B | **Complete** | Entity awareness (context for tasks) |
-| Phase 4C | **Complete** | Bidirectional sync (write to sources) |
-| Phase 4D | **Next** | Rich Slack input (files, docs) |
-| Phase 4E | Planned | Image/screenshot processing |
-| Phase 4F | **Complete** | Event-driven notifications |
-| Phase 4G | Planned | Google Drive folder structure mirroring entities |
+**Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 1 | Add action field to Task model | **Done** |
+| 2 | Create processor - question detection | **Done** |
+| 3 | Add draft response generation | **Done** |
+| 4 | Process single ticket | **Done** |
+| 5 | Add /process endpoint | **Done** |
+| 6 | Add ivan process CLI command | **Done** |
+| 7 | Modify /done to execute actions | Pending |
+| 8 | Show draft in ivan next | Pending |
+| 9 | Add ivan done -e (edit) | Pending |
+| 10 | Export pending for offline | Pending |
+| 11 | Import decisions | Pending |
+| 12 | Run full test suite | Pending |
 
 ## Done This Session
 
-Implemented Phase 4F — Event-driven notifications:
+Implemented Tasks 1-6 of Ticket Processor:
 
-1. **Database**: Added `notification_state` JSON column to Task model for tracking last notification state
-2. **Config**: Created `config/notifications.yaml` with mode (focus/full/off), threshold, and trigger settings
-3. **Events**: Created `Event` dataclass and `EventType` enum (deadline_warning, overdue, assigned, status_critical, mentioned, comment_on_owned, blocker_resolved)
-4. **EventDetector**: Detects events by comparing task states during sync and webhook processing
-5. **NotificationFilter**: Filters notifications based on config (threshold, triggers, deduplication)
-6. **NotificationState**: Helpers for state management and deduplication
-7. **SlackNotifier**: Updated with event-based message formatting (human-readable messages per event type)
-8. **Integration**: Wired event system into `scheduled_sync()` and webhook endpoints
-9. **Tests**: All 125 tests passing with comprehensive coverage
-10. **Database atomicity**: Fixed transaction handling to commit after each task (not after loop)
+1. **Task 1:** Added `action` (JSON) and `linked_task_id` (String) columns to Task model
+2. **Task 2:** Created `processor.py` with `find_pending_action()` - detects @ivanivanka mentions with questions
+3. **Task 3:** Added `draft_response()` with simple heuristics for common question patterns
+4. **Task 4:** Added `process_ticket()` - analyzes tickets and creates processor task dicts
+5. **Task 5:** Added `/process` endpoint and `fetch_github_comments()` helper
+6. **Task 6:** Added `ivan process` CLI command with `--limit` and `--dry-run` flags
 
-Files created/modified:
-- `backend/app/events.py` - Event dataclass and EventType enum
-- `backend/app/event_detector.py` - Event detection logic
-- `backend/app/notification_filter.py` - Filtering based on config
-- `backend/app/notification_state.py` - State management helpers
-- `backend/app/notification_config.py` - Config loader
-- `backend/app/notifier.py` - Updated with event-based messages
-- `backend/app/main.py` - Integrated event system
-- `backend/app/models.py` - Added notification_state column
-- `config/notifications.yaml` - Notification configuration
-- `docs/plans/2026-01-28-phase-4f-*.md` - Design and implementation plans
+**Commits pushed:**
+- `802ca8a` feat(models): add action and linked_task_id fields to Task
+- `dfc0999` feat(processor): add find_pending_action for question detection
+- `dadb5df` feat(processor): add draft_response with simple heuristics
+- `57a7bb4` feat(processor): add process_ticket to analyze and create tasks
+- `de27f91` feat(api): add /process endpoint for ticket processing
+- `df7cc57` feat(cli): add ivan process command
+
+**Tests:** 9 processor/model tests passing
+
+**Note:** test_api.py has a pre-existing TestClient/Starlette version compatibility issue affecting all API endpoint tests (unrelated to this work).
 
 ## Next Action
 
-**Ticket Processor implementation queued.** See `docs/tasks/QUEUE.md`.
-
-Spec: `docs/plans/2026-01-29-ticket-processor-implementation.md` (12 tasks)
+Continue with Tasks 7-12:
+- Task 7: Modify /done to execute actions
+- Task 8: Show draft in ivan next
+- Task 9: Add ivan done -e (edit)
+- Task 10: Export pending for offline
+- Task 11: Import decisions
+- Task 12: Run full test suite
 
 ## Blockers
 
@@ -71,31 +77,25 @@ None
 
 ## Context for Next Session
 
-Phase 4F (Event-driven notifications) is complete. The system now:
-- Detects semantic events (deadline approaching, overdue, assigned, mentioned, etc.)
-- Filters notifications based on config mode (focus/full/off), score threshold, and per-trigger settings
-- Formats human-readable messages per event type
-- Prevents duplicate notifications via state tracking in database
-- Commits after each task for atomicity (no duplicates on crash/restart)
+The Ticket Processor adds capability to:
+1. Analyze GitHub issues for @ivanivanka questions
+2. Draft responses using simple heuristics
+3. Create "processor" tasks with action payloads
+4. On `ivan done`, execute the action (post GitHub comment)
 
-Notification configuration (`config/notifications.yaml`):
-- `mode`: focus (high-priority only), full (all), or off
-- `threshold`: minimum score for notification (deadline/overdue ignore threshold)
-- `triggers`: enable/disable specific event types
+**New files:**
+- `backend/app/processor.py` - Core processing logic
 
-Bot commands remain the same:
-- `next` - Get highest priority task
-- `done` - Mark complete in source system
-- `skip` - Skip to next task
-- `comment <text>` - Add comment to current task
-- `tasks` - Show all tasks
-- `morning` - Morning briefing
-- `sync` - Force sync
-- `projects` - List active workstreams
+**Modified files:**
+- `backend/app/models.py` - Added action, linked_task_id columns
+- `backend/app/main.py` - Added /process endpoint
+- `cli/ivan/__init__.py` - Added process command
+
+**New CLI command:**
+- `ivan process` - Process tickets and create actionable tasks
+- `ivan process --dry-run` - Show what would be processed
 
 ## References
 
+- Ticket Processor spec: `docs/plans/2026-01-29-ticket-processor-implementation.md`
 - Phase 4 roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
-- Phase 4F design: `docs/plans/2026-01-28-phase-4f-event-notifications-design.md`
-- Phase 4F implementation: `docs/plans/2026-01-28-phase-4f-implementation-plan.md`
-- GitHub Issues: #1 (4A done), #2 (4B done), #3 (4C done), #4 (4D), #5 (4E), #7 (4F done), #8 (4G)
