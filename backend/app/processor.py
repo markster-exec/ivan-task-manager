@@ -5,7 +5,12 @@ Analyzes tickets, drafts responses, creates actionable tasks.
 
 import re
 import logging
+import uuid
 from typing import Optional
+
+from .entity_loader import get_entity
+from .entity_mapper import map_task_to_entity
+from .models import Task
 
 logger = logging.getLogger(__name__)
 
@@ -101,3 +106,81 @@ def draft_response(context: dict) -> str:
 
     # Default response
     return "Thanks for the update. I'll review and respond shortly."
+
+
+def process_ticket(ticket: Task, comments: list[dict]) -> Optional[dict]:
+    """Process a single ticket and determine action.
+
+    Args:
+        ticket: The Task object representing the GitHub issue
+        comments: List of comment dicts
+
+    Returns:
+        Dict with action_type and task details, or None if no action needed
+    """
+    # Find what needs doing
+    pending = find_pending_action(comments, assignee=ticket.assignee)
+
+    if not pending:
+        return None
+
+    # Get entity context
+    entity = None
+    workstream = None
+    mapping = map_task_to_entity(ticket)
+    if mapping:
+        entity_id, workstream_id = mapping
+        entity = get_entity(entity_id)
+        if entity:
+            workstream = (
+                entity.get_workstream(workstream_id)
+                if workstream_id
+                else entity.get_active_workstream()
+            )
+
+    # Build context for response drafting
+    context = {
+        "question": pending.get("question", ""),
+        "entity_name": entity.name if entity else "",
+        "workstream": workstream.name if workstream else "",
+        "ticket_title": ticket.title,
+        "recent_comments": [c.get("body", "")[:100] for c in comments[-5:]],
+    }
+
+    # Draft response
+    draft = draft_response(context)
+
+    # Extract issue number from URL or ID
+    issue_number = (
+        ticket.id.replace("github:", "") if ticket.id.startswith("github:") else None
+    )
+    if not issue_number and ticket.url:
+        # Try to extract from URL
+        match = re.search(r"/issues/(\d+)", ticket.url)
+        if match:
+            issue_number = match.group(1)
+
+    # Create processor task
+    proc_task_id = f"proc-{issue_number}-{uuid.uuid4().hex[:8]}"
+
+    return {
+        "action_type": "create_processor_task",
+        "task": {
+            "id": proc_task_id,
+            "source": "processor",
+            "title": f"Respond to #{issue_number}: {pending.get('question', '')[:50]}...",
+            "description": (
+                f"Question from {pending.get('author', 'unknown')}:\n\n"
+                f"{pending.get('question', '')}"
+            ),
+            "status": "pending",
+            "url": ticket.url,
+            "action": {
+                "type": "github_comment",
+                "issue": int(issue_number) if issue_number else None,
+                "repo": "markster-exec/project-tracker",
+                "body": draft,
+            },
+            "linked_task_id": ticket.id,
+        },
+    }

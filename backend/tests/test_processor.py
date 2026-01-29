@@ -63,3 +63,61 @@ class TestDraftResponse:
         assert draft is not None
         assert len(draft) > 10  # Non-trivial response
         assert isinstance(draft, str)
+
+
+class TestProcessTicket:
+    """Tests for processing tickets."""
+
+    def test_process_ticket_creates_processor_task(self):
+        """Should create processor task for ticket with pending question."""
+        from unittest.mock import patch
+
+        from app.models import Task
+        from app.processor import process_ticket
+
+        # Mock GitHub task
+        ticket = Task(
+            id="github:31",
+            source="github",
+            title="[CLIENT:Mark] TASK - Domain setup",
+            status="open",
+            url="https://github.com/markster-exec/project-tracker/issues/31",
+        )
+
+        comments = [
+            {"author": "atiti", "body": "Close this? @ivanivanka"},
+        ]
+
+        with patch("app.processor.map_task_to_entity") as mock_map:
+            with patch("app.processor.get_entity") as mock_entity:
+                mock_map.return_value = None  # No entity mapping
+                mock_entity.return_value = None
+
+                result = process_ticket(ticket, comments)
+
+        assert result is not None
+        assert result["action_type"] == "create_processor_task"
+        assert result["task"]["source"] == "processor"
+        assert result["task"]["action"]["type"] == "github_comment"
+        assert result["task"]["linked_task_id"] == "github:31"
+
+    def test_process_ticket_no_action_needed(self):
+        """Should return None when no action needed."""
+        from app.models import Task
+        from app.processor import process_ticket
+
+        ticket = Task(
+            id="github:31",
+            source="github",
+            title="[CLIENT:Mark] TASK - Domain setup",
+            status="open",
+            url="https://github.com/markster-exec/project-tracker/issues/31",
+        )
+
+        comments = [
+            {"author": "atiti", "body": "All done."},
+        ]
+
+        result = process_ticket(ticket, comments)
+
+        assert result is None
