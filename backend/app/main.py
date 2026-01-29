@@ -392,6 +392,14 @@ class ExportResponse(BaseModel):
     entities_count: int
 
 
+class ProcessResponse(BaseModel):
+    success: bool
+    processed: int
+    created_tasks: int
+    manual_tasks: int
+    message: str
+
+
 # =============================================================================
 # API Routes
 # =============================================================================
@@ -1014,4 +1022,102 @@ async def export_tasks(request: ExportRequest, db: Session = Depends(get_db)):
         message=result.message,
         tasks_count=result.tasks_count,
         entities_count=result.entities_count,
+    )
+
+
+# =============================================================================
+# Process Routes
+# =============================================================================
+
+
+async def fetch_github_comments(issue_number: int) -> list[dict]:
+    """Fetch comments for a GitHub issue."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://api.github.com/repos/{settings.github_repo}/issues/{issue_number}/comments",
+            headers={
+                "Authorization": f"token {settings.github_token}",
+                "Accept": "application/vnd.github.v3+json",
+            },
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return [
+                {
+                    "author": c.get("user", {}).get("login", ""),
+                    "body": c.get("body", ""),
+                }
+                for c in data
+            ]
+    return []
+
+
+@app.post("/process", response_model=ProcessResponse)
+async def process_tickets(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Process open tickets and create actionable tasks.
+
+    Analyzes GitHub tickets, drafts responses for questions,
+    and creates processor tasks or ClickUp tasks as needed.
+    """
+    from .processor import process_ticket
+
+    # Get open GitHub tasks
+    github_tasks = (
+        db.query(Task)
+        .filter(Task.source == "github", Task.status != "done")
+        .limit(limit)
+        .all()
+    )
+
+    processed = 0
+    created_tasks = 0
+    manual_tasks = 0
+
+    for task in github_tasks:
+        # Extract issue number
+        issue_number = task.id.replace("github:", "")
+        if not issue_number.isdigit():
+            continue
+
+        # Fetch comments
+        comments = await fetch_github_comments(int(issue_number))
+
+        # Process ticket
+        result = process_ticket(task, comments)
+        processed += 1
+
+        if result and result.get("action_type") == "create_processor_task":
+            # Create processor task in database
+            proc_task_data = result["task"]
+            proc_task = Task(
+                id=proc_task_data["id"],
+                source=proc_task_data["source"],
+                title=proc_task_data["title"],
+                description=proc_task_data.get("description"),
+                status=proc_task_data["status"],
+                url=proc_task_data["url"],
+                action=proc_task_data.get("action"),
+                linked_task_id=proc_task_data.get("linked_task_id"),
+                assignee="ivan",
+            )
+            db.add(proc_task)
+            created_tasks += 1
+
+        elif result and result.get("action_type") == "create_manual_task":
+            manual_tasks += 1
+            # TODO: Create ClickUp task in Agent Queue
+
+    db.commit()
+
+    return ProcessResponse(
+        success=True,
+        processed=processed,
+        created_tasks=created_tasks,
+        manual_tasks=manual_tasks,
+        message=f"Processed {processed} tickets: {created_tasks} drafts ready, {manual_tasks} need manual work",
     )
