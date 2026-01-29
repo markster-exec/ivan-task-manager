@@ -545,6 +545,44 @@ def export(output: str):
 
 
 @cli.command()
+@click.option("--limit", "-l", default=50, help="Max tickets to process")
+@click.option("--dry-run", is_flag=True, help="Show what would be processed without creating tasks")
+def process(limit: int, dry_run: bool):
+    """Process tickets and create actionable tasks."""
+    console.print()
+
+    if dry_run:
+        console.print("[yellow]DRY RUN - no tasks will be created[/yellow]")
+        console.print()
+
+    with console.status("[bold blue]Processing tickets...", spinner="dots"):
+        if dry_run:
+            # For dry run, just list what would be processed
+            data = api_get("/tasks")
+            github_tasks = [t for t in data if t.get("source") == "github"]
+
+            console.print(f"[dim]Would process {len(github_tasks[:limit])} GitHub tickets[/dim]")
+            return
+
+        result = api_post(f"/process?limit={limit}")
+
+    if result.get("success"):
+        console.print(f"[green]✓[/green] {result.get('message', 'Processing complete')}")
+        console.print()
+        console.print(f"  Processed: {result.get('processed', 0)} tickets")
+        console.print(f"  Drafts ready: {result.get('created_tasks', 0)}")
+        console.print(f"  Manual tasks: {result.get('manual_tasks', 0)}")
+        console.print()
+
+        if result.get("created_tasks", 0) > 0:
+            console.print("[dim]Run [bold]ivan next[/bold] to review and approve drafts.[/dim]")
+    else:
+        console.print(f"[red]✗[/red] {result.get('message', 'Processing failed')}")
+
+    console.print()
+
+
+@cli.command()
 @click.argument("task_number", type=int, required=False)
 def context(task_number: int = None):
     """Show entity context for current or specified task."""
