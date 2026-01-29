@@ -41,3 +41,25 @@ class TestFindPendingAction:
         result = find_pending_action(comments, assignee="ivan")
 
         assert result is None
+
+
+class TestDraftResponse:
+    """Tests for draft response generation."""
+
+    def test_draft_response_simple_question(self):
+        """Should draft response for simple yes/no question."""
+        from app.processor import draft_response
+
+        context = {
+            "question": "Close this task or keep it open? @ivanivanka",
+            "entity_name": "Mark De Grasse",
+            "workstream": "Email infrastructure",
+            "ticket_title": "[CLIENT:Mark] TASK - Domain setup",
+            "recent_comments": ["DNS set up", "Mailboxes created"],
+        }
+
+        draft = draft_response(context)
+
+        assert draft is not None
+        assert len(draft) > 10  # Non-trivial response
+        assert isinstance(draft, str)
