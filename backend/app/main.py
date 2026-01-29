@@ -35,6 +35,7 @@ from .scorer import (
 from .syncer import sync_all_sources
 from .notifier import SlackNotifier
 from .writers import get_writer
+from .exporter import OfflineExporter
 
 # Bot is optional - only imported if slack_bolt is available
 try:
@@ -377,6 +378,18 @@ class WriteResultResponse(BaseModel):
     source_id: Optional[str] = None
     conflict: bool = False
     current_state: Optional[str] = None
+
+
+class ExportRequest(BaseModel):
+    output_path: str
+    include_briefs: bool = True
+
+
+class ExportResponse(BaseModel):
+    success: bool
+    message: str
+    tasks_count: int
+    entities_count: int
 
 
 # =============================================================================
@@ -963,3 +976,42 @@ async def clickup_webhook(request: Request, db: Session = Depends(get_db)):
                 db.commit()
 
     return {"status": "ok", "event": event}
+
+
+# =============================================================================
+# Export Routes
+# =============================================================================
+
+
+@app.post("/export", response_model=ExportResponse)
+async def export_tasks(request: ExportRequest, db: Session = Depends(get_db)):
+    """Export tasks and entities to a bundle for offline use.
+
+    Creates a bundle directory with:
+    - tasks.db: SQLite database with non-done tasks
+    - entities/: Copy of entity YAML files
+    - briefs/: Empty directory for future use
+    - MANIFEST.md: Export metadata
+    """
+    from pathlib import Path
+
+    output_path = Path(request.output_path).expanduser()
+
+    # Get entities directory
+    entities_path = Path(settings.entities_dir)
+    if not entities_path.is_absolute():
+        entities_path = Path(__file__).parent.parent.parent / settings.entities_dir
+
+    exporter = OfflineExporter(db)
+    result = exporter.export(
+        output_path,
+        entities_dir=entities_path,
+        include_briefs=request.include_briefs,
+    )
+
+    return ExportResponse(
+        success=result.success,
+        message=result.message,
+        tasks_count=result.tasks_count,
+        entities_count=result.entities_count,
+    )

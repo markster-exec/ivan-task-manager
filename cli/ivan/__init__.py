@@ -12,6 +12,7 @@ Usage:
     ivan sync                  - Force sync from all sources
     ivan blocking              - Show who's waiting on you
     ivan blocked               - Show what you're waiting on
+    ivan export [--output PATH] - Export tasks to SQLite bundle for offline use
 """
 
 import os
@@ -513,6 +514,34 @@ def projects():
     if not active_found:
         console.print("[dim]No active workstreams[/dim]")
         console.print()
+
+
+@cli.command()
+@click.option(
+    "--output",
+    "-o",
+    default="~/Developer/Personal/ivan-os/data/sync",
+    help="Output directory for export bundle",
+)
+def export(output: str):
+    """Export tasks to SQLite bundle for ivan-os offline sync."""
+    import os
+
+    # Expand ~ in path
+    output_path = os.path.expanduser(output)
+
+    with console.status("[bold blue]Exporting tasks...", spinner="dots"):
+        result = api_post("/export", {"output_path": output_path, "include_briefs": True})
+
+    console.print()
+    if result.get("success"):
+        console.print("[green]✓[/green] Export complete")
+        console.print(f"  Tasks: {result.get('tasks_count', 0)}")
+        console.print(f"  Entities: {result.get('entities_count', 0)}")
+        console.print(f"  Output: [cyan]{output_path}[/cyan]")
+    else:
+        console.print(f"[red]✗[/red] {result.get('message', 'Export failed')}")
+    console.print()
 
 
 @cli.command()
