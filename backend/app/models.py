@@ -54,6 +54,10 @@ class Task(Base):
     # Notification tracking (event-driven notifications)
     notification_state = Column(JSON, default=dict)
 
+    # Processor action (for processor-generated tasks)
+    action = Column(JSON, nullable=True)  # {"type": "github_comment", "issue": 31, ...}
+    linked_task_id = Column(String, nullable=True)  # Reference to original task
+
     @property
     def is_blocking(self) -> list[str]:
         return self.is_blocking_json or []
