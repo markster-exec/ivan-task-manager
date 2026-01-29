@@ -4,7 +4,21 @@
 
 ## PENDING
 
-(no pending tasks)
+### 1. [BUILD] Ticket Processor (Priority: High)
+
+**Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
+
+**Summary:** Implement Layer 4 execution capability that processes GitHub tickets, drafts responses, and creates actionable tasks.
+
+**Key deliverables:**
+- `action` field on Task model
+- `processor.py` module (question detection, draft generation)
+- `/process` and `/import` API endpoints
+- `ivan process` and `ivan import` CLI commands
+- Modified `ivan done` to execute actions
+- Export/import for offline workflow
+
+**12 tasks in spec.** Follow TDD approach - write failing test, implement, verify, commit.
 
 ---
 
