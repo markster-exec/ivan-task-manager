@@ -306,6 +306,7 @@ class TaskResponse(BaseModel):
     is_revenue: bool
     is_blocking: list[str]
     score_breakdown: dict
+    action: Optional[dict] = None  # For processor tasks with actions
 
     class Config:
         from_attributes = True
@@ -439,6 +440,7 @@ async def get_tasks(db: Session = Depends(get_db)):
             is_revenue=t.is_revenue,
             is_blocking=t.is_blocking,
             score_breakdown=breakdown,
+            action=t.action,
         )
         for t, breakdown in enriched
     ]
@@ -494,6 +496,7 @@ async def get_next_task(db: Session = Depends(get_db)):
             is_revenue=task.is_revenue,
             is_blocking=task.is_blocking,
             score_breakdown=breakdown,
+            action=task.action,
         ),
         context=" | ".join(context_parts),
         message=f"Focus on: {task.title}",
@@ -581,6 +584,7 @@ async def mark_done(db: Session = Depends(get_db)):
             is_revenue=next_task.is_revenue,
             is_blocking=next_task.is_blocking,
             score_breakdown=breakdown,
+            action=next_task.action,
         )
 
     return ActionResponse(
@@ -644,6 +648,7 @@ async def skip_task(db: Session = Depends(get_db)):
             is_revenue=next_task.is_revenue,
             is_blocking=next_task.is_blocking,
             score_breakdown=breakdown,
+            action=next_task.action,
         ),
     )
 

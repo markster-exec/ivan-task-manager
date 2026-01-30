@@ -122,14 +122,40 @@ def format_task(task: dict, show_context: bool = True) -> Panel:
 
     content.append("\n")
 
-    # Task URL
-    content.append(f"Task: {task.get('url', 'No URL')}", style="cyan underline")
+    # Show action draft for processor tasks
+    action = task.get("action")
+    if action and action.get("type") == "github_comment":
+        content.append("Draft response:\n", style="bold yellow")
+        content.append("+" + "-" * 50 + "+\n", style="dim")
+        # Word wrap the draft
+        draft = action.get("body", "")
+        for line in draft.split("\n"):
+            while len(line) > 48:
+                content.append(f"| {line[:48]} |\n", style="dim")
+                line = line[48:]
+            content.append(f"| {line.ljust(48)} |\n", style="dim")
+        content.append("+" + "-" * 50 + "+\n", style="dim")
+        content.append("\n")
+        content.append(
+            f"On done: Posts comment to GitHub #{action.get('issue')}\n", style="cyan"
+        )
+    else:
+        # Task URL
+        content.append(f"Task: {task.get('url', 'No URL')}", style="cyan underline")
+
+    # Determine border style
+    if task.get("source") == "processor":
+        border = "yellow"
+    elif task.get("is_revenue"):
+        border = "green"
+    else:
+        border = "blue"
 
     return Panel(
         content,
         title=f"[bold]{task.get('title', 'Untitled')}[/bold]",
         subtitle=f"[dim]{task.get('source', 'unknown')}:{task.get('id', '?').split(':')[-1]}[/dim]",
-        border_style="green" if task.get("is_revenue") else "blue",
+        border_style=border,
     )
 
 
@@ -155,9 +181,18 @@ def next():
     console.print()
     console.print(format_task(task))
     console.print()
-    console.print(
-        "[dim]When done: [bold]ivan done[/bold] | To skip: [bold]ivan skip[/bold][/dim]"
-    )
+
+    # Show appropriate hints based on task type
+    if task.get("source") == "processor":
+        console.print(
+            "[dim][bold]ivan done[/bold] post as-is | "
+            "[bold]ivan done -e[/bold] edit first | "
+            "[bold]ivan skip[/bold] next task[/dim]"
+        )
+    else:
+        console.print(
+            "[dim]When done: [bold]ivan done[/bold] | To skip: [bold]ivan skip[/bold][/dim]"
+        )
 
 
 @cli.command()
