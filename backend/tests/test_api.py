@@ -545,6 +545,93 @@ class TestGitHubWebhook:
             assert response.status_code == 401
 
 
+class TestDoneExecutesAction:
+    """Test that /done executes processor task actions."""
+
+    def test_done_executes_github_comment_action(self, client):
+        """POST /done should execute action for processor tasks."""
+        # Create processor task with action
+        db = TestSessionLocal()
+        proc_task = Task(
+            id="proc-31-abc123",
+            source="processor",
+            title="Respond to #31",
+            status="pending",
+            url="https://github.com/markster-exec/project-tracker/issues/31",
+            assignee="ivan",
+            action={
+                "type": "github_comment",
+                "issue": 31,
+                "repo": "markster-exec/project-tracker",
+                "body": "Keep it open.",
+            },
+            linked_task_id="github:31",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(proc_task)
+
+        # Set as current task
+        current = CurrentTask(user_id="ivan", task_id="proc-31-abc123")
+        db.add(current)
+        db.commit()
+        db.close()
+
+        # Mock GitHub writer for action execution
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            # Mock both comment (for action) and complete (for task completion)
+            mock_writer.comment.return_value = WriteResult(
+                success=True, message="Comment posted"
+            )
+            mock_writer.complete.return_value = WriteResult(
+                success=True, message="Task completed"
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post("/done")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        # Verify the comment action was executed
+        mock_writer.comment.assert_called_once_with("31", "Keep it open.")
+
+    def test_done_without_action_skips_execution(self, client):
+        """POST /done should skip action execution for non-processor tasks."""
+        db = TestSessionLocal()
+        task = Task(
+            id="clickup:regular123",
+            source="clickup",
+            title="Regular Task",
+            status="todo",
+            assignee="ivan",
+            url="http://clickup.com/regular123",
+            is_revenue=False,
+            is_blocking_json=[],
+        )
+        db.add(task)
+        current = CurrentTask(user_id="ivan", task_id="clickup:regular123")
+        db.add(current)
+        db.commit()
+        db.close()
+
+        with patch("app.main.get_writer") as mock_get_writer:
+            mock_writer = AsyncMock()
+            mock_writer.complete.return_value = WriteResult(
+                success=True, message="Task completed"
+            )
+            mock_get_writer.return_value = mock_writer
+
+            response = client.post("/done")
+
+        assert response.status_code == 200
+        # comment should NOT have been called (no action)
+        mock_writer.comment.assert_not_called()
+        # but complete SHOULD have been called
+        mock_writer.complete.assert_called_once()
+
+
 class TestClickUpWebhook:
     """Test POST /webhooks/clickup endpoint."""
 

@@ -515,10 +515,27 @@ async def mark_done(db: Session = Depends(get_db)):
     # Save the completed task id before getting next task
     completed_task_id = task.id
 
-    # Update in source system (ClickUp/GitHub)
-    source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
-    writer = get_writer(task.source)
-    await writer.complete(source_id)
+    # Check if task has an action to execute (processor tasks)
+    if task.action:
+        action = task.action
+        if action.get("type") == "github_comment":
+            # Execute GitHub comment action
+            writer = get_writer("github")
+            issue_id = str(action.get("issue", ""))
+            body = action.get("body", "")
+            result = await writer.comment(issue_id, body)
+            if not result.success:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to post comment: {result.message}",
+                )
+            logger.info(f"Action executed: posted comment to issue #{issue_id}")
+
+    # Update in source system (ClickUp/GitHub) - skip for processor tasks
+    if task.source != "processor":
+        source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+        writer = get_writer(task.source)
+        await writer.complete(source_id)
 
     # Mark as done locally
     task.status = "done"
