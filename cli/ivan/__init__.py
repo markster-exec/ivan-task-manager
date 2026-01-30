@@ -625,6 +625,29 @@ def export(output: str):
     console.print()
 
 
+@cli.command(name="import")
+@click.argument("path", default="~/Developer/Personal/ivan-os/data/sync")
+def import_decisions(path: str):
+    """Import decisions from offline bundle."""
+    # Expand ~ in path
+    bundle_path = os.path.expanduser(path)
+
+    with console.status("[bold blue]Importing decisions...", spinner="dots"):
+        result = api_post("/import", {"bundle_path": bundle_path})
+
+    console.print()
+    if result.get("success"):
+        console.print("[green]✓[/green] Import complete")
+        console.print(f"  Approved: {result.get('approved', 0)}")
+        console.print(f"  Edited: {result.get('edited', 0)}")
+        console.print(f"  Rejected: {result.get('rejected', 0)}")
+        console.print()
+        console.print("[dim]Run [bold]ivan next[/bold] to review and post.[/dim]")
+    else:
+        console.print(f"[red]✗[/red] {result.get('message', 'Import failed')}")
+    console.print()
+
+
 @cli.command()
 @click.option("--limit", "-l", default=50, help="Max tickets to process")
 @click.option("--dry-run", is_flag=True, help="Show what would be processed without creating tasks")

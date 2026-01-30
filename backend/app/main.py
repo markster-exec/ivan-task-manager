@@ -1075,6 +1075,47 @@ async def export_tasks(request: ExportRequest, db: Session = Depends(get_db)):
 
 
 # =============================================================================
+# Import Routes
+# =============================================================================
+
+
+class ImportRequest(BaseModel):
+    bundle_path: str
+
+
+class ImportResponse(BaseModel):
+    success: bool
+    message: str
+    approved: int
+    rejected: int
+    edited: int
+
+
+@app.post("/import", response_model=ImportResponse)
+async def import_decisions(request: ImportRequest, db: Session = Depends(get_db)):
+    """Import decisions from offline bundle.
+
+    Reads decisions.json from the bundle's outbox/ directory and applies
+    approve/reject/edit decisions to processor tasks.
+    """
+    from pathlib import Path
+
+    from .importer import OfflineImporter
+
+    bundle_path = Path(request.bundle_path).expanduser()
+    importer = OfflineImporter(db)
+    result = importer.import_decisions(bundle_path)
+
+    return ImportResponse(
+        success=result.success,
+        message=result.message,
+        approved=result.approved,
+        rejected=result.rejected,
+        edited=result.edited,
+    )
+
+
+# =============================================================================
 # Process Routes
 # =============================================================================
 
