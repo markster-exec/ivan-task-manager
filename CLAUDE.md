@@ -36,6 +36,18 @@
 - Search GitHub issues for tasks — unless the queue links to one
 - Access other projects — you are scoped to this project
 
+### "Queue" Means QUEUE.md (NOT ClickUp)
+
+When user says any of these:
+- "check your queue"
+- "what's in your queue"
+- "check your tasks"
+- "what tasks do you have"
+
+**DO THIS:** Read `docs/tasks/QUEUE.md` and report what's PENDING/IN PROGRESS.
+
+**DO NOT:** Call ClickUp. ClickUp is for humans. Your queue is the file.
+
 ### Task Workflow
 
 1. Move task from PENDING → IN PROGRESS in `docs/tasks/QUEUE.md`
