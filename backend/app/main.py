@@ -846,6 +846,33 @@ async def create_task_in_source(
     )
 
 
+class UpdateActionRequest(BaseModel):
+    body: str
+
+
+@app.post("/tasks/{task_id}/update-action")
+async def update_task_action(
+    task_id: str,
+    request: UpdateActionRequest,
+    db: Session = Depends(get_db),
+):
+    """Update the action body for a processor task."""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if not task.action:
+        raise HTTPException(status_code=400, detail="Task has no action")
+
+    # Update action body
+    action = task.action.copy()
+    action["body"] = request.body
+    task.action = action
+    db.commit()
+
+    return {"success": True, "message": "Action updated"}
+
+
 # =============================================================================
 # Webhook Receivers (Real-time Updates)
 # =============================================================================

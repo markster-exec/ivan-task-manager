@@ -197,8 +197,54 @@ def next():
 
 @cli.command()
 @click.option("--comment", "-c", help="Add a completion comment")
-def done(comment: Optional[str]):
+@click.option("--edit", "-e", is_flag=True, help="Edit action before executing (for processor tasks)")
+def done(comment: Optional[str], edit: bool):
     """Mark current task as complete and show next."""
+    import subprocess
+    import tempfile
+
+    # If edit flag, get current task and open editor
+    if edit:
+        with console.status("[bold blue]Getting current task...", spinner="dots"):
+            data = api_get("/next")
+
+        if not data.get("task"):
+            console.print("[red]⚠️  No current task[/red]")
+            return
+
+        task = data["task"]
+        action = task.get("action")
+
+        if not action or action.get("type") != "github_comment":
+            console.print(
+                "[yellow]⚠️  This task has no editable action. Proceeding with normal done.[/yellow]"
+            )
+        else:
+            # Open editor with draft
+            draft = action.get("body", "")
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False
+            ) as f:
+                f.write(draft)
+                temp_path = f.name
+
+            # Open in default editor
+            editor = os.environ.get("EDITOR", "vim")
+            subprocess.call([editor, temp_path])
+
+            # Read edited content
+            with open(temp_path) as f:
+                edited = f.read().strip()
+
+            os.unlink(temp_path)
+
+            if edited != draft:
+                # Update action with edited content
+                with console.status("[bold blue]Updating draft...", spinner="dots"):
+                    api_post(f"/tasks/{task['id']}/update-action", {"body": edited})
+                console.print("[green]✓[/green] Draft updated")
+
+    # Continue with normal done flow
     with console.status("[bold blue]Marking task complete...", spinner="dots"):
         data = api_post("/done")
 
