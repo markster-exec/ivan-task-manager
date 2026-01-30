@@ -85,6 +85,8 @@ class OfflineExporter:
             # Create output directory structure
             output_path.mkdir(parents=True, exist_ok=True)
             (output_path / "entities").mkdir(exist_ok=True)
+            (output_path / "pending").mkdir(exist_ok=True)
+            (output_path / "outbox").mkdir(exist_ok=True)
             if include_briefs:
                 (output_path / "briefs").mkdir(exist_ok=True)
 
@@ -94,10 +96,15 @@ class OfflineExporter:
             # Copy entity files
             entities_count = self._copy_entities(output_path / "entities", entities_dir)
 
-            # Create manifest
-            self._create_manifest(output_path, tasks_count, entities_count)
+            # Export pending processor tasks
+            pending_count = self._export_pending_tasks(output_path / "pending")
 
-            message = f"Exported {tasks_count} tasks and {entities_count} entities"
+            # Create manifest
+            self._create_manifest(
+                output_path, tasks_count, entities_count, pending_count
+            )
+
+            message = f"Exported {tasks_count} tasks, {entities_count} entities, {pending_count} pending"
             logger.info(message)
 
             return ExportResult(
@@ -202,8 +209,75 @@ class OfflineExporter:
 
         return count
 
+    def _export_pending_tasks(self, output_dir: Path) -> int:
+        """Export processor tasks as markdown files for offline review.
+
+        Args:
+            output_dir: Output pending directory
+
+        Returns:
+            Number of pending tasks exported
+        """
+        # Query processor tasks
+        tasks = (
+            self.db.query(Task)
+            .filter(Task.source == "processor", Task.status == "pending")
+            .all()
+        )
+
+        count = 0
+        for i, task in enumerate(tasks, 1):
+            if not task.action:
+                continue
+
+            # Build markdown content
+            action = task.action
+            issue_num = action.get("issue", "?")
+
+            content = f"""---
+task_id: {task.id}
+github_issue: {issue_num}
+repo: {action.get('repo', 'markster-exec/project-tracker')}
+action_type: {action.get('type', 'unknown')}
+status: {task.status}
+linked_task: {task.linked_task_id or ''}
+---
+
+# {task.title}
+
+## Context
+
+**URL:** {task.url}
+**Linked Task:** {task.linked_task_id or 'None'}
+
+## Description
+
+{task.description or 'No description'}
+
+## Draft Response
+
+{action.get('body', '')}
+
+## Decision
+
+- [ ] approve
+- [ ] approve with edits (modify draft above)
+- [ ] reject
+- [ ] convert to manual task
+"""
+
+            filename = f"{i:03d}-respond-{issue_num}.md"
+            (output_dir / filename).write_text(content)
+            count += 1
+
+        return count
+
     def _create_manifest(
-        self, output_path: Path, tasks_count: int, entities_count: int
+        self,
+        output_path: Path,
+        tasks_count: int,
+        entities_count: int,
+        pending_count: int = 0,
     ) -> None:
         """Create MANIFEST.md with export metadata.
 
@@ -211,6 +285,7 @@ class OfflineExporter:
             output_path: Bundle output directory
             tasks_count: Number of tasks exported
             entities_count: Number of entities copied
+            pending_count: Number of pending processor tasks exported
         """
         manifest = f"""# Export Manifest
 
@@ -220,12 +295,22 @@ Exported at: {datetime.utcnow().isoformat()}Z
 
 - Tasks: {tasks_count}
 - Entities: {entities_count}
+- Pending reviews: {pending_count}
 
 ## Contents
 
 - `tasks.db` - SQLite database with active tasks
 - `entities/` - Entity YAML files
+- `pending/` - Processor tasks for offline review
+- `outbox/` - Place decisions here for import
 - `briefs/` - Brief documents (future use)
+
+## Offline Workflow
+
+1. Review files in `pending/`
+2. Mark decisions (approve/reject/edit)
+3. Place `decisions.json` in `outbox/`
+4. Run `ivan import` when back online
 
 ## Schema
 
