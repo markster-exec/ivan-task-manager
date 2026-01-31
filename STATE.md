@@ -4,11 +4,11 @@
 
 ## Last Updated
 
-2026-01-30 05:25 UTC
+2026-01-31 16:30 UTC
 
 ## Current Phase
 
-Ticket Processor Implementation — **12/12 tasks complete** ✓
+Chief of Staff Bot Design — **Complete** ✓
 
 ## Active Work
 
@@ -17,57 +17,33 @@ Ticket Processor Implementation — **12/12 tasks complete** ✓
 | Branch | `main` |
 | PR | None |
 | Issue | None |
-| Status | Ticket Processor complete |
-
-## Ticket Processor Progress
-
-**Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 1 | Add action field to Task model | **Done** |
-| 2 | Create processor - question detection | **Done** |
-| 3 | Add draft response generation | **Done** |
-| 4 | Process single ticket | **Done** |
-| 5 | Add /process endpoint | **Done** |
-| 6 | Add ivan process CLI command | **Done** |
-| 7 | Modify /done to execute actions | **Done** |
-| 8 | Show draft in ivan next | **Done** |
-| 9 | Add ivan done -e (edit) | **Done** |
-| 10 | Export pending for offline | **Done** |
-| 11 | Import decisions | **Done** |
-| 12 | Run full test suite | **Done** |
+| Status | Design complete, ready for implementation planning |
 
 ## Done This Session
 
-Completed Tasks 7-12 of Ticket Processor:
+**Brainstorming session with Ivan to redesign the Slack bot into a full chief of staff assistant.**
 
-1. **Task 7:** Modified /done endpoint to execute github_comment actions via GitHubWriter
-2. **Task 8:** Added action field to TaskResponse, format_task shows draft with bordered box
-3. **Task 9:** Added /tasks/{id}/update-action endpoint and ivan done -e flag for editing
-4. **Task 10:** Exporter now creates pending/ and outbox/ directories with markdown files
-5. **Task 11:** Created importer.py and /import endpoint with ivan import CLI command
-6. **Task 12:** Full test suite run - 143 tests pass (excluding test_api.py version issue)
+Key decisions made:
+1. **Three surfaces:** Slack (GPT-5.2), Claude Code (Claude), ivan-os (autonomous)
+2. **AI fallback chain:** Azure (30s) → ivan-os → Anthropic → regex degraded
+3. **Smart escalation:** Day 1-2-3+ ladder, no spam, grouped alerts
+4. **Hybrid interaction:** Buttons + natural language, context collection in threads
+5. **Full assistant:** Research, multi-modal input (links, images, video, files, voice)
+6. **Context awareness:** Location, timezone, priorities, calendar
+7. **Task dependencies:** Detection, tracking, blocker queries
+8. **Delegation routing:** Attila → GitHub, Tamas → ClickUp, based on work type
+9. **Bilingual:** EN/HU with ivan-os Hungarian model routing
+10. **Full audit trail:** Every action logged, debugging commands
 
-**Commits pushed:**
-- `c80a703` feat(api): execute action on /done for processor tasks
-- `7dfab06` feat(cli): show draft and action hints for processor tasks
-- `6c51b22` feat(cli): add ivan done -e to edit action before posting
-- `fb9012e` feat(export): add pending processor tasks for offline review
-- `b37ee52` feat(import): add offline decision import
-
-**Tests:** 143 passing (9 processor/model + 134 other module tests)
-
-**Note:** test_api.py has a pre-existing TestClient/Starlette version compatibility issue affecting all API endpoint tests (unrelated to this work).
+**Design doc created:**
+- `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
 
 ## Next Action
 
-Ticket Processor implementation is **complete**. Ready for next task from main account.
-
-Potential follow-up work:
-- Fix test_api.py Starlette version issue
-- Add LLM-based draft generation (replace heuristics)
-- Add ClickUp task creation for manual work items
+Design is complete. Next steps:
+1. Create implementation plan from design doc
+2. Break into phases (likely: AI engine → escalation → buttons → assistant → inputs)
+3. Begin implementation
 
 ## Blockers
 
@@ -75,26 +51,46 @@ None
 
 ## Context for Next Session
 
-The Ticket Processor is now fully implemented:
+The Chief of Staff Bot design covers a complete redesign of the Slack bot:
 
-1. `ivan process` - Analyzes GitHub issues for @ivanivanka questions, drafts responses
-2. `ivan next` - Shows draft responses in bordered box for processor tasks
-3. `ivan done` - Posts comment to GitHub (executes the action)
-4. `ivan done -e` - Edit draft in $EDITOR before posting
-5. `ivan export` - Includes pending/ directory with markdown files for offline review
-6. `ivan import` - Imports decisions from outbox/decisions.json
+**Architecture:**
+- Three surfaces sharing state (Slack, Claude Code, ivan-os)
+- Context layer (location, priorities, calendar)
+- AI engine with 30s timeout and fallback chain
 
-**New files:**
-- `backend/app/processor.py` - Core processing logic
-- `backend/app/importer.py` - Offline decision import
+**Key Features:**
+- Smart escalation (no notification spam)
+- Morning briefings with inline actions
+- Conversational assistant (research, entity queries)
+- Process any input (links, images, video, files)
+- Task dependencies and delegation routing
+- Bilingual support (EN/HU)
+- Full action logging
 
-**Modified files:**
-- `backend/app/models.py` - Added action, linked_task_id columns
-- `backend/app/main.py` - Added /process, /import, /update-action endpoints
-- `backend/app/exporter.py` - Added pending task export
-- `cli/ivan/__init__.py` - Added process, import commands, done -e flag
+**Files to create (from design):**
+- `backend/app/ai_engine.py` - AI provider abstraction
+- `backend/app/context.py` - Context layer
+- `backend/app/escalation.py` - Smart escalation
+- `backend/app/input_processor.py` - Multi-modal input
+- `backend/app/action_logger.py` - Audit trail
+- `backend/app/routing.py` - Delegation routing
+- `backend/app/dependencies.py` - Task dependencies
+
+## Previous Work
+
+### Ticket Processor (Complete)
+
+**Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
+
+All 12 tasks complete. Features:
+- `ivan process` - Analyze GitHub issues, draft responses
+- `ivan next` - Shows drafts in bordered box
+- `ivan done` - Posts comment to GitHub
+- `ivan done -e` - Edit draft before posting
+- `ivan export/import` - Offline workflow
 
 ## References
 
+- Chief of Staff design: `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
 - Ticket Processor spec: `docs/plans/2026-01-29-ticket-processor-implementation.md`
 - Phase 4 roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
