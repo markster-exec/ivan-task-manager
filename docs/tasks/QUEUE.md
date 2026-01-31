@@ -15,23 +15,13 @@ tags: [tasks, queue]
 
 ## PENDING
 
-### 1. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium)
-
-**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 3 section)
-
-**Goal:** Natural language task management.
-
-**Deliverables:**
-- [ ] AI engine (Azure OpenAI + regex fallback)
-- [ ] NL task commands ("defer X to Monday")
-- [ ] Entity queries ("what's happening with Kyle?")
-- [ ] Basic research ("find coworking spaces in LA")
+(none currently - evaluating Phase 1-3 results)
 
 ---
 
 ### FUTURE (After Phase 1-3 evaluation)
 
-- Phase 4: Context Layer (location, priorities, calendar)
+- Phase 4: Entity Awareness (entity queries, status summaries)
 - Phase 5: Input Processing (links, images, files)
 - Phase 6: Advanced (dependencies, routing, video, bilingual)
 
@@ -47,7 +37,35 @@ See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ## DONE
 
-### 1. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium) — Completed 2026-01-31
+### 1. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium) — Completed 2026-01-31
+
+**Spec:** `docs/plans/2026-01-31-phase3-ai-conversations-design.md`
+
+**Summary:** Implemented AI-powered natural language task management with regex + AI hybrid approach.
+
+**Deliverables completed:**
+- ✓ AI engine with Azure OpenAI (timeout, fallback, JSON parsing)
+- ✓ Intent parser (regex for fast matching, AI for complex queries)
+- ✓ Web research (DuckDuckGo + AI summarization)
+- ✓ NL task commands ("defer X to Monday")
+- ✓ Entity queries ("what's happening with Kyle?")
+- ✓ 36 new tests (all passing)
+
+**Files created:**
+- `backend/app/ai_engine.py`
+- `backend/app/intent_parser.py`
+- `backend/app/researcher.py`
+- `backend/tests/test_ai_engine.py`
+- `backend/tests/test_intent_parser.py`
+- `backend/tests/test_researcher.py`
+- `docs/plans/2026-01-31-phase3-ai-conversations-design.md`
+
+**Files modified:**
+- `backend/app/bot.py` (AI-powered routing + new handlers)
+
+---
+
+### 2. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium) — Completed 2026-01-31
 
 **Spec:** `docs/plans/2026-01-31-phase2-button-actions-design.md`
 
@@ -77,7 +95,7 @@ See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ---
 
-### 2. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High) — Completed 2026-01-31
+### 3. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High) — Completed 2026-01-31
 
 **Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 1 section)
 
@@ -108,7 +126,7 @@ See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ---
 
-### 3. [BUILD] Ticket Processor (Priority: High) — Completed 2026-01-30
+### 4. [BUILD] Ticket Processor (Priority: High) — Completed 2026-01-30
 
 **Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
 

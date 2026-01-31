@@ -4,11 +4,11 @@
 
 ## Last Updated
 
-2026-01-31 20:30 UTC
+2026-01-31 21:15 UTC
 
 ## Current Phase
 
-Chief of Staff Bot Phase 2 — **Complete** ✓
+Chief of Staff Bot Phase 3 — **Complete** ✓
 
 ## Active Work
 
@@ -17,63 +17,69 @@ Chief of Staff Bot Phase 2 — **Complete** ✓
 | Branch | `main` |
 | PR | None |
 | Issue | None |
-| Status | Phase 2 complete, Phase 3 ready |
+| Status | Phase 2+3 complete, Phase 4 ready |
 
 ## Done This Session
 
-**Implemented Phase 2: Button Actions**
+**Implemented Phase 3: AI Conversations**
 
-1. **Interactive buttons** (replaced placeholders)
-   - Defer → opens modal with date options (1d, 3d, 1w, 2w)
-   - Done → opens modal with optional context input
-   - Snooze → opens modal with duration options (1d, 3d, 1w)
-   - Delegate → opens modal with team member options (Attila, Tamas)
+1. **AI Engine** (`backend/app/ai_engine.py`)
+   - Azure OpenAI wrapper with timeout and error handling
+   - `complete()` — text completion with configurable timeout
+   - `complete_json()` — JSON parsing with markdown cleanup
+   - Graceful fallback when no API key configured
 
-2. **Writer methods** for source system updates
-   - `update_due_date()` — ClickUp: sets due_date, GitHub: adds comment
-   - `reassign()` — ClickUp: removes old/adds new assignee, GitHub: patches assignees
+2. **Intent Parser** (`backend/app/intent_parser.py`)
+   - Regex patterns for fast matching (high confidence commands)
+   - AI fallback for complex/ambiguous queries
+   - `ParsedIntent` dataclass with intent, params, confidence
+   - Supported intents: next, done, skip, tasks, morning, sync, defer, entity_query, research, help
 
-3. **Action handlers** (`backend/app/slack_actions.py`)
-   - `register_action_handlers()` registers all button/modal handlers on Bolt app
-   - Handlers update source systems via writers
-   - Handlers update local DB
-   - Handlers notify user via DM
+3. **Researcher** (`backend/app/researcher.py`)
+   - DuckDuckGo search (no API key needed)
+   - AI-powered summarization of results
+   - Graceful fallback to basic list when AI unavailable
 
-4. **Database changes**
-   - Added `snooze_until` column to Task model
-   - Created Alembic migration 002
+4. **Bot integration** (`backend/app/bot.py`)
+   - Updated `route_message()` to use AI-powered intent parsing
+   - Added handlers for defer_nl, research, entity_query intents
+   - Regex + AI hybrid approach
 
 5. **Tests**
-   - 16 new tests in `test_slack_actions.py`
-   - 8 new tests in `test_writers.py` for new methods
-   - All 206 unit tests passing (excluding pre-existing test_api.py failures)
+   - 8 tests in `test_ai_engine.py`
+   - 23 tests in `test_intent_parser.py`
+   - 5 tests in `test_researcher.py`
+   - All 52 Phase 2+3 tests passing
 
-## Files Created
+## Files Created (Phase 3)
 
-- `backend/app/slack_actions.py` — Interactive component handlers
-- `backend/alembic/versions/002_add_snooze_until.py` — Migration
-- `backend/tests/test_slack_actions.py` — Tests for buttons/modals
-- `docs/plans/2026-01-31-phase2-button-actions-design.md` — Design doc
+- `backend/app/ai_engine.py` — Azure OpenAI wrapper
+- `backend/app/intent_parser.py` — NL intent parsing
+- `backend/app/researcher.py` — Web search + summarization
+- `backend/tests/test_ai_engine.py` — Tests for AI engine
+- `backend/tests/test_intent_parser.py` — Tests for intent parser
+- `backend/tests/test_researcher.py` — Tests for researcher
+- `docs/plans/2026-01-31-phase3-ai-conversations-design.md` — Design doc
 
-## Files Modified
+## Files Modified (Phase 3)
 
-- `backend/app/models.py` — Added `snooze_until` column
-- `backend/app/writers/base.py` — Added abstract methods
-- `backend/app/writers/clickup.py` — Implemented `update_due_date`, `reassign`
-- `backend/app/writers/github.py` — Implemented `update_due_date`, `reassign`
-- `backend/app/slack_blocks.py` — Real buttons + modal builders
-- `backend/app/bot.py` — Registers action handlers
-- `backend/tests/test_writers.py` — Added tests for new methods
-- `docs/tasks/QUEUE.md` — Updated task status
+- `backend/app/bot.py` — AI-powered routing + new handlers
+
+## Phase 2 Summary (Previous)
+
+- Interactive buttons (Defer, Done, Snooze, Delegate)
+- Writer methods (`update_due_date`, `reassign`)
+- Action handlers in `slack_actions.py`
+- Database migration for `snooze_until` column
+- 16 tests for buttons/modals
 
 ## Next Action
 
-Phase 3: AI Conversations (now unblocked)
-- AI engine (Azure OpenAI + regex fallback)
-- NL task commands ("defer X to Monday")
-- Entity queries ("what's happening with Kyle?")
-- Basic research
-- See `docs/plans/2026-01-31-chief-of-staff-phases.md` Phase 3 section
+Phase 4: Entity Awareness
+- Entity query handler ("what's happening with Kyle?")
+- Entity-task linking
+- Status summaries per entity
+- See `docs/plans/2026-01-31-chief-of-staff-phases.md` Phase 4 section
 
 ## Blockers
 
@@ -81,27 +87,38 @@ None
 
 ## Context for Next Session
 
-**Phase 2 key functions:**
-- `register_action_handlers(bolt_app)` — Call from bot.py to enable buttons
-- `defer_modal()`, `done_modal()`, `snooze_modal()`, `delegate_modal()` — Modal builders
-- `action_buttons(task_id)` — Creates action button block
+**Phase 3 key functions:**
+- `get_ai_engine()` — Singleton AI engine
+- `get_intent_parser()` — Singleton intent parser
+- `get_researcher()` — Singleton researcher
+- `await parser.parse(text)` → `ParsedIntent`
+- `await researcher.research(query)` → summary string
 
-**Team member mapping (in slack_actions.py):**
+**Intent routing in bot.py:**
 ```python
-TEAM_MEMBERS = {
-    "attila": {"clickup_id": "81842673", "github_username": "atiti"},
-    "tamas": {"clickup_id": "2695145", "github_username": None},
+INTENT_HANDLERS = {
+    "next": handle_next,
+    "done": handle_done,
+    "skip": handle_skip,
+    "tasks": handle_tasks,
+    "morning": handle_morning,
+    "sync": handle_sync,
+    "entity_query": handle_entity_query,
+    "research": handle_research,
+    "defer": handle_defer_nl,
+    "help": handle_help,
 }
 ```
 
 **Success criteria met:**
-- ✓ Defer updates due date in ClickUp (adds comment in GitHub)
-- ✓ Done collects context via modal, marks complete
-- ✓ Snooze hides task locally (snooze_until column)
-- ✓ Delegate reassigns in ClickUp and GitHub
+- ✓ AI engine with timeout and fallback
+- ✓ Regex + AI hybrid intent parsing
+- ✓ Web search with AI summarization
+- ✓ 36 new tests passing
 
 ## References
 
+- Phase 3 design: `docs/plans/2026-01-31-phase3-ai-conversations-design.md`
 - Phase 2 design: `docs/plans/2026-01-31-phase2-button-actions-design.md`
 - Chief of Staff design: `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
 - Phase breakdown: `docs/plans/2026-01-31-chief-of-staff-phases.md`

@@ -7,11 +7,14 @@ Listens for DMs and responds to commands like:
 - "tasks" / "show my tasks"
 - "morning" / "briefing"
 - "sync" / "refresh"
+- Natural language commands via AI
+- Research queries
 """
 
 import asyncio
 import logging
 import re
+from datetime import datetime, timedelta
 from typing import Optional
 
 from .config import get_settings
@@ -20,6 +23,8 @@ from .scorer import score_and_sort_tasks, get_score_breakdown
 from .syncer import sync_all_sources
 from .entity_loader import find_entity_by_name, get_all_entities
 from .writers import get_writer
+from .intent_parser import get_intent_parser
+from .researcher import get_researcher
 from . import slack_blocks
 
 settings = get_settings()
@@ -481,11 +486,114 @@ async def handle_projects(user_id: str) -> dict:
     return {"text": text, "blocks": blocks}
 
 
+async def handle_defer_nl(user_id: str, params: dict) -> dict:
+    """Handle natural language defer command.
+
+    Args:
+        user_id: Slack user ID
+        params: Parsed parameters (entity?, days?)
+
+    Returns:
+        dict with 'text' and 'blocks'
+    """
+    entity_name = params.get("entity")
+    days = params.get("days", 7)
+
+    db = SessionLocal()
+    try:
+        query = db.query(Task).filter(Task.status != "done", Task.assignee == "ivan")
+
+        tasks_to_defer = []
+
+        # Filter by entity if specified
+        if entity_name:
+            entity = find_entity_by_name(entity_name)
+            if not entity:
+                return {"text": f"Entity '{entity_name}' not found."}
+
+            # Find tasks matching entity (check title for entity reference)
+            all_tasks = query.all()
+            entity_lower = entity_name.lower()
+            for task in all_tasks:
+                title_lower = task.title.lower()
+                if entity_lower in title_lower or entity.name.lower() in title_lower:
+                    tasks_to_defer.append(task)
+
+            if not tasks_to_defer:
+                return {"text": f"No tasks found related to {entity.name}."}
+        else:
+            # No entity specified - defer current task only
+            current = (
+                db.query(CurrentTask).filter(CurrentTask.user_id == "ivan").first()
+            )
+            if not current or not current.task_id:
+                return {"text": 'No current task. Say "next" to get one.'}
+
+            task = db.query(Task).filter(Task.id == current.task_id).first()
+            if task:
+                tasks_to_defer = [task]
+            else:
+                return {"text": "Current task not found."}
+
+        # Calculate new due date
+        new_date = (datetime.now() + timedelta(days=days)).date()
+
+        # Defer matching tasks
+        deferred_count = 0
+        for task in tasks_to_defer:
+            source_id = task.id.split(":", 1)[1] if ":" in task.id else task.id
+            writer = get_writer(task.source)
+            result = await writer.update_due_date(source_id, new_date)
+
+            if result.success:
+                task.due_date = new_date
+                task.escalation_level = 0
+                deferred_count += 1
+
+        db.commit()
+
+        if entity_name:
+            text = f"Deferred {deferred_count} {entity_name} task(s) to {new_date}"
+        else:
+            text = f"Deferred to {new_date}"
+
+        return {
+            "text": text,
+            "blocks": [slack_blocks.section(f"📅 {text}")],
+        }
+
+    finally:
+        db.close()
+
+
+async def handle_research(user_id: str, query: str) -> dict:
+    """Handle research query.
+
+    Args:
+        user_id: Slack user ID
+        query: Search query
+
+    Returns:
+        dict with 'text' and 'blocks'
+    """
+    researcher = get_researcher()
+    summary = await researcher.research(query)
+
+    return {
+        "text": summary,
+        "blocks": [
+            slack_blocks.section(f"🔍 *Research: {query}*"),
+            slack_blocks.divider(),
+            slack_blocks.section(summary),
+        ],
+    }
+
+
 # =============================================================================
 # Message Router
 # =============================================================================
 
-# Command patterns (case-insensitive)
+# Command patterns for backwards compatibility (fast regex path)
 COMMAND_PATTERNS = [
     (r"\b(next|what should i (work on|do)|what'?s next)\b", handle_next),
     (r"\b(done|finished|completed|i finished)\b", handle_done),
@@ -497,99 +605,48 @@ COMMAND_PATTERNS = [
     (r"\b(help|commands|\?)\b", handle_help),
 ]
 
-# Intent handlers for Azure OpenAI classification
+# Intent handlers mapping
 INTENT_HANDLERS = {
-    "next": handle_next,
-    "done": handle_done,
-    "skip": handle_skip,
-    "tasks": handle_tasks,
-    "morning": handle_morning,
-    "sync": handle_sync,
-    "projects": handle_projects,
-    "help": handle_help,
+    "next": lambda uid, params: handle_next(uid),
+    "done": lambda uid, params: handle_done(uid),
+    "skip": lambda uid, params: handle_skip(uid),
+    "tasks": lambda uid, params: handle_tasks(uid),
+    "morning": lambda uid, params: handle_morning(uid),
+    "sync": lambda uid, params: handle_sync(uid),
+    "projects": lambda uid, params: handle_projects(uid),
+    "help": lambda uid, params: handle_help(uid),
+    "defer": lambda uid, params: handle_defer_nl(uid, params),
+    "entity_query": lambda uid, params: handle_entity(
+        uid, params.get("entity_name", "")
+    ),
+    "research": lambda uid, params: handle_research(uid, params.get("query", "")),
 }
 
 
-async def classify_intent_with_ai(text: str) -> Optional[str]:
-    """Use Azure OpenAI to classify intent when regex fails.
-
-    Returns one of: next, done, skip, tasks, morning, sync, help, or None.
-    """
-    if not settings.azure_openai_api_key:
-        return None
-
-    try:
-        from openai import AzureOpenAI
-
-        client = AzureOpenAI(
-            api_key=settings.azure_openai_api_key,
-            api_version="2024-02-15-preview",
-            azure_endpoint=settings.azure_openai_endpoint,
-        )
-
-        prompt = f"""Classify the following message into one of these task management intents:
-- "next": User wants to get their next task to work on
-- "done": User has completed their current task
-- "skip": User wants to skip/defer the current task
-- "tasks": User wants to see all their tasks
-- "morning": User wants a morning briefing/summary
-- "sync": User wants to refresh/sync tasks from sources
-- "help": User wants help with available commands
-- "unknown": Message doesn't match any intent
-
-Message: "{text}"
-
-Respond with ONLY the intent name (next, done, skip, tasks, morning, sync, help, or unknown)."""
-
-        response = client.chat.completions.create(
-            model=settings.azure_openai_deployment,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=10,
-            temperature=0,
-        )
-
-        intent = response.choices[0].message.content.strip().lower()
-        if intent in INTENT_HANDLERS:
-            logger.info(f"AI classified '{text}' as intent: {intent}")
-            return intent
-        return None
-
-    except Exception as e:
-        logger.warning(f"AI intent classification failed: {e}")
-        return None
-
-
 async def route_message(text: str, user_id: str) -> Optional[dict]:
-    """Route message to appropriate handler.
+    """Route message to appropriate handler using AI-powered intent parsing.
 
     Returns:
         dict with 'text' and optional 'blocks', or None if no match
     """
-    text_lower = text.lower().strip()
-
-    # Check for entity query first
-    entity_match = re.search(
-        r"(?:entity|what'?s happening with|status of)\s+(\w+)", text_lower
-    )
-    if entity_match:
-        return await handle_entity(user_id, entity_match.group(1))
-
-    # Check for comment command (special: takes argument)
+    # Check for comment command first (special: takes argument, keep regex)
     comment_match = re.match(r"comment\s+(.+)", text.strip(), re.IGNORECASE)
     if comment_match:
         comment_text = comment_match.group(1).strip()
         return await handle_comment(user_id, comment_text)
 
-    # Try regex patterns (fast path)
-    for pattern, handler in COMMAND_PATTERNS:
-        if re.search(pattern, text_lower):
-            return await handler(user_id)
+    # Use AI-powered intent parser
+    parser = get_intent_parser()
+    parsed = await parser.parse(text)
 
-    # Fall back to AI intent classification
-    intent = await classify_intent_with_ai(text)
-    if intent and intent in INTENT_HANDLERS:
-        return await INTENT_HANDLERS[intent](user_id)
+    logger.info(f"Parsed intent: {parsed.intent} (confidence: {parsed.confidence})")
 
+    # Route to handler
+    if parsed.intent in INTENT_HANDLERS:
+        handler = INTENT_HANDLERS[parsed.intent]
+        return await handler(user_id, parsed.params)
+
+    # Unknown intent
     return None
 
 
