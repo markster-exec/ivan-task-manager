@@ -329,3 +329,161 @@ class TestGitHubWriter:
             assert result.success is True
             call_args = client.post.call_args
             assert call_args[1]["json"]["title"] == "[CLIENT:acme-corp] Test Issue"
+
+    @pytest.mark.asyncio
+    async def test_update_due_date_adds_comment(self, writer):
+        """update_due_date adds comment since GitHub has no native due dates."""
+        from datetime import date
+
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.post.return_value = mock_response
+            mock_client.return_value = client
+
+            new_date = date(2026, 2, 15)
+            result = await writer.update_due_date("123", new_date)
+
+            assert result.success is True
+            client.post.assert_called_once()
+            call_args = client.post.call_args
+            assert "comments" in call_args[0][0]
+            assert "2026-02-15" in call_args[1]["json"]["body"]
+
+    @pytest.mark.asyncio
+    async def test_reassign_success(self, writer):
+        """reassign updates issue assignees."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.patch.return_value = mock_response
+            mock_client.return_value = client
+
+            result = await writer.reassign("123", "atiti")
+
+            assert result.success is True
+            assert "atiti" in result.message
+            client.patch.assert_called_once()
+            call_args = client.patch.call_args
+            assert call_args[1]["json"]["assignees"] == ["atiti"]
+
+    @pytest.mark.asyncio
+    async def test_reassign_not_collaborator(self, writer):
+        """reassign handles 422 error for non-collaborators."""
+        with patch.object(writer, "_get_client") as mock_client:
+            client = AsyncMock()
+            error_response = MagicMock()
+            error_response.status_code = 422
+            client.patch.side_effect = httpx.HTTPStatusError(
+                "Unprocessable", request=MagicMock(), response=error_response
+            )
+            mock_client.return_value = client
+
+            result = await writer.reassign("123", "unknown-user")
+
+            assert result.success is False
+            assert "not a collaborator" in result.message
+
+
+class TestClickUpWriterNewMethods:
+    """Test new ClickUpWriter methods: update_due_date and reassign."""
+
+    @pytest.fixture
+    def writer(self):
+        """Create ClickUpWriter with mocked settings."""
+        with patch("app.writers.clickup.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                clickup_api_token="test-token",
+                clickup_list_id="test-list",
+                clickup_complete_status="complete",
+            )
+            return ClickUpWriter()
+
+    @pytest.mark.asyncio
+    async def test_update_due_date_success(self, writer):
+        """update_due_date updates task due date in ClickUp."""
+        from datetime import date
+
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.put.return_value = mock_response
+            mock_client.return_value = client
+
+            new_date = date(2026, 2, 15)
+            result = await writer.update_due_date("abc123", new_date)
+
+            assert result.success is True
+            assert "2026-02-15" in result.message
+            client.put.assert_called_once()
+            call_args = client.put.call_args
+            assert "due_date" in call_args[1]["json"]
+
+    @pytest.mark.asyncio
+    async def test_update_due_date_http_error(self, writer):
+        """update_due_date handles HTTP errors."""
+        from datetime import date
+
+        with patch.object(writer, "_get_client") as mock_client:
+            client = AsyncMock()
+            error_response = MagicMock()
+            error_response.status_code = 500
+            client.put.side_effect = httpx.HTTPStatusError(
+                "Server error", request=MagicMock(), response=error_response
+            )
+            mock_client.return_value = client
+
+            result = await writer.update_due_date("abc123", date(2026, 2, 15))
+
+            assert result.success is False
+            assert "500" in result.message
+
+    @pytest.mark.asyncio
+    async def test_reassign_success(self, writer):
+        """reassign updates task assignees in ClickUp."""
+        with patch.object(writer, "_get_client") as mock_client:
+            mock_get_response = MagicMock()
+            mock_get_response.json.return_value = {
+                "assignees": [{"id": "old-assignee"}]
+            }
+            mock_get_response.raise_for_status = MagicMock()
+
+            mock_put_response = MagicMock()
+            mock_put_response.raise_for_status = MagicMock()
+
+            client = AsyncMock()
+            client.get.return_value = mock_get_response
+            client.put.return_value = mock_put_response
+            mock_client.return_value = client
+
+            result = await writer.reassign("abc123", "new-assignee-id")
+
+            assert result.success is True
+            assert "reassigned" in result.message.lower()
+            client.put.assert_called_once()
+            call_args = client.put.call_args
+            assert call_args[1]["json"]["assignees"]["rem"] == ["old-assignee"]
+            assert call_args[1]["json"]["assignees"]["add"] == ["new-assignee-id"]
+
+    @pytest.mark.asyncio
+    async def test_reassign_http_error(self, writer):
+        """reassign handles HTTP errors."""
+        with patch.object(writer, "_get_client") as mock_client:
+            client = AsyncMock()
+            error_response = MagicMock()
+            error_response.status_code = 403
+            client.get.side_effect = httpx.HTTPStatusError(
+                "Forbidden", request=MagicMock(), response=error_response
+            )
+            mock_client.return_value = client
+
+            result = await writer.reassign("abc123", "assignee-id")
+
+            assert result.success is False
+            assert "403" in result.message

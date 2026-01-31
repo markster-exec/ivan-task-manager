@@ -1,5 +1,6 @@
 """ClickUp writer for updating tasks."""
 
+from datetime import date
 from typing import Optional
 
 import httpx
@@ -107,6 +108,69 @@ class ClickUpWriter(SourceWriter):
                 message="Task created in ClickUp",
                 source_id=data["id"],
             )
+
+        except httpx.HTTPStatusError as e:
+            return WriteResult(
+                success=False, message=f"ClickUp error: {e.response.status_code}"
+            )
+        except httpx.RequestError as e:
+            return WriteResult(success=False, message=f"Connection error: {e}")
+
+    async def update_due_date(self, source_id: str, new_date: date) -> WriteResult:
+        """Update task due date in ClickUp."""
+        try:
+            client = await self._get_client()
+
+            # ClickUp expects due_date as Unix timestamp in milliseconds
+            from datetime import datetime, timezone
+
+            due_timestamp = int(
+                datetime.combine(new_date, datetime.min.time())
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+                * 1000
+            )
+
+            response = await client.put(
+                f"{self.API_BASE}/task/{source_id}",
+                json={"due_date": due_timestamp},
+            )
+            response.raise_for_status()
+            return WriteResult(
+                success=True, message=f"Due date updated to {new_date} in ClickUp"
+            )
+
+        except httpx.HTTPStatusError as e:
+            return WriteResult(
+                success=False, message=f"ClickUp error: {e.response.status_code}"
+            )
+        except httpx.RequestError as e:
+            return WriteResult(success=False, message=f"Connection error: {e}")
+
+    async def reassign(self, source_id: str, assignee_id: str) -> WriteResult:
+        """Reassign task to another user in ClickUp."""
+        try:
+            client = await self._get_client()
+
+            # First get current assignees to replace them
+            get_resp = await client.get(f"{self.API_BASE}/task/{source_id}")
+            get_resp.raise_for_status()
+            current_assignees = [
+                str(a["id"]) for a in get_resp.json().get("assignees", [])
+            ]
+
+            # Update assignees: remove current, add new
+            response = await client.put(
+                f"{self.API_BASE}/task/{source_id}",
+                json={
+                    "assignees": {
+                        "rem": current_assignees,
+                        "add": [assignee_id],
+                    }
+                },
+            )
+            response.raise_for_status()
+            return WriteResult(success=True, message="Task reassigned in ClickUp")
 
         except httpx.HTTPStatusError as e:
             return WriteResult(

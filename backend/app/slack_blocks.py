@@ -233,36 +233,198 @@ def format_skip(skipped_title: str) -> tuple[str, list[dict]]:
     return text, blocks
 
 
-def action_buttons_placeholder(task_id: str) -> dict:
-    """Create placeholder action buttons for escalation messages.
-
-    These buttons are non-functional in Phase 1.
-    Phase 2 will add interactivity.
+def action_buttons(task_id: str) -> dict:
+    """Create interactive action buttons for escalation messages.
 
     Args:
         task_id: Task ID for button action values
     """
     return {
         "type": "actions",
+        "block_id": f"task_actions_{task_id}",
         "elements": [
             {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Defer", "emoji": True},
-                "value": f"defer:{task_id}",
-                "action_id": "defer_placeholder",
+                "value": task_id,
+                "action_id": "defer_button",
             },
             {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Done", "emoji": True},
-                "value": f"done:{task_id}",
-                "action_id": "done_placeholder",
+                "value": task_id,
+                "action_id": "done_button",
                 "style": "primary",
             },
             {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Snooze", "emoji": True},
-                "value": f"snooze:{task_id}",
-                "action_id": "snooze_placeholder",
+                "value": task_id,
+                "action_id": "snooze_button",
+            },
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Delegate", "emoji": True},
+                "value": task_id,
+                "action_id": "delegate_button",
+            },
+        ],
+    }
+
+
+# Keep placeholder for backwards compatibility during transition
+action_buttons_placeholder = action_buttons
+
+
+def defer_modal(task_id: str, task_title: str) -> dict:
+    """Create modal for defer action with date options."""
+    return {
+        "type": "modal",
+        "callback_id": "defer_modal",
+        "private_metadata": task_id,
+        "title": {"type": "plain_text", "text": "Defer Task"},
+        "submit": {"type": "plain_text", "text": "Defer"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            section(f"*{task_title}*"),
+            {
+                "type": "input",
+                "block_id": "defer_option",
+                "element": {
+                    "type": "static_select",
+                    "action_id": "defer_select",
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "Select new due date",
+                    },
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": "Tomorrow"},
+                            "value": "1",
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "3 days"},
+                            "value": "3",
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "1 week"},
+                            "value": "7",
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "2 weeks"},
+                            "value": "14",
+                        },
+                    ],
+                },
+                "label": {"type": "plain_text", "text": "Defer until"},
+            },
+        ],
+    }
+
+
+def done_modal(task_id: str, task_title: str) -> dict:
+    """Create modal for done action with optional context."""
+    return {
+        "type": "modal",
+        "callback_id": "done_modal",
+        "private_metadata": task_id,
+        "title": {"type": "plain_text", "text": "Complete Task"},
+        "submit": {"type": "plain_text", "text": "Mark Done"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            section(f"*{task_title}*"),
+            {
+                "type": "input",
+                "block_id": "done_context",
+                "optional": True,
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "context_input",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "What happened? (optional)",
+                    },
+                    "max_length": 500,
+                },
+                "label": {"type": "plain_text", "text": "Context"},
+            },
+        ],
+    }
+
+
+def snooze_modal(task_id: str, task_title: str) -> dict:
+    """Create modal for snooze action."""
+    return {
+        "type": "modal",
+        "callback_id": "snooze_modal",
+        "private_metadata": task_id,
+        "title": {"type": "plain_text", "text": "Snooze Task"},
+        "submit": {"type": "plain_text", "text": "Snooze"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            section(f"*{task_title}*"),
+            context(
+                "Snoozing hides the task locally without changing the source system."
+            ),
+            {
+                "type": "input",
+                "block_id": "snooze_option",
+                "element": {
+                    "type": "static_select",
+                    "action_id": "snooze_select",
+                    "placeholder": {"type": "plain_text", "text": "Snooze for..."},
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": "1 day"},
+                            "value": "1",
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "3 days"},
+                            "value": "3",
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "1 week"},
+                            "value": "7",
+                        },
+                    ],
+                },
+                "label": {"type": "plain_text", "text": "Snooze duration"},
+            },
+        ],
+    }
+
+
+def delegate_modal(task_id: str, task_title: str) -> dict:
+    """Create modal for delegate action."""
+    return {
+        "type": "modal",
+        "callback_id": "delegate_modal",
+        "private_metadata": task_id,
+        "title": {"type": "plain_text", "text": "Delegate Task"},
+        "submit": {"type": "plain_text", "text": "Delegate"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            section(f"*{task_title}*"),
+            {
+                "type": "input",
+                "block_id": "delegate_option",
+                "element": {
+                    "type": "static_select",
+                    "action_id": "delegate_select",
+                    "placeholder": {"type": "plain_text", "text": "Select person"},
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": "Attila"},
+                            "value": "attila",
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "Tamas"},
+                            "value": "tamas",
+                        },
+                    ],
+                },
+                "label": {"type": "plain_text", "text": "Delegate to"},
             },
         ],
     }

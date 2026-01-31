@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 
@@ -70,5 +71,31 @@ class SourceWriter(ABC):
 
         Returns:
             WriteResult with source_id of created task
+        """
+        pass
+
+    @abstractmethod
+    async def update_due_date(self, source_id: str, new_date: date) -> WriteResult:
+        """Update task due date in source system.
+
+        Args:
+            source_id: The task ID in the source system
+            new_date: The new due date
+
+        Returns:
+            WriteResult indicating success/failure
+        """
+        pass
+
+    @abstractmethod
+    async def reassign(self, source_id: str, assignee_id: str) -> WriteResult:
+        """Reassign task to another user in source system.
+
+        Args:
+            source_id: The task ID in the source system
+            assignee_id: The new assignee's ID in the source system
+
+        Returns:
+            WriteResult indicating success/failure
         """
         pass

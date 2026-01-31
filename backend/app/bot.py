@@ -602,7 +602,12 @@ def create_app():
     """Create and configure the Slack Bolt app."""
     from slack_bolt.async_app import AsyncApp
 
+    from .slack_actions import register_action_handlers
+
     bolt_app = AsyncApp(token=settings.slack_bot_token)
+
+    # Register interactive component handlers (buttons, modals)
+    register_action_handlers(bolt_app)
 
     @bolt_app.event("message")
     async def handle_message_events(event: dict, say):

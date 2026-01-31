@@ -4,11 +4,11 @@
 
 ## Last Updated
 
-2026-01-31 18:00 UTC
+2026-01-31 20:30 UTC
 
 ## Current Phase
 
-Chief of Staff Bot Phase 1 — **Complete** ✓
+Chief of Staff Bot Phase 2 — **Complete** ✓
 
 ## Active Work
 
@@ -17,50 +17,63 @@ Chief of Staff Bot Phase 1 — **Complete** ✓
 | Branch | `main` |
 | PR | None |
 | Issue | None |
-| Status | Phase 1 complete, Phase 2 ready |
+| Status | Phase 2 complete, Phase 3 ready |
 
 ## Done This Session
 
-**Implemented Phase 1: Smart Notifications**
+**Implemented Phase 2: Button Actions**
 
-1. **Escalation ladder** (`backend/app/escalation.py`)
-   - Day 0: Morning briefing only
-   - Day 1: Flagged in briefing
-   - Day 2: Afternoon digest
-   - Day 3+: Individual DM with buttons
-   - Day 5+: Escalation prompt ("delegate or kill?")
-   - Day 7+: Final warning
+1. **Interactive buttons** (replaced placeholders)
+   - Defer → opens modal with date options (1d, 3d, 1w, 2w)
+   - Done → opens modal with optional context input
+   - Snooze → opens modal with duration options (1d, 3d, 1w)
+   - Delegate → opens modal with team member options (Attila, Tamas)
 
-2. **Morning briefing** (`backend/app/briefing.py`)
-   - Top 3 tasks by score
-   - Summary stats (total, overdue, due today, blocking people)
-   - Calendar placeholder (for Phase 4)
-   - Suggestion when 3+ tasks are 3+ days overdue
+2. **Writer methods** for source system updates
+   - `update_due_date()` — ClickUp: sets due_date, GitHub: adds comment
+   - `reassign()` — ClickUp: removes old/adds new assignee, GitHub: patches assignees
 
-3. **Consolidation rule**
-   - 3+ tasks at same escalation level → one grouped message
-   - `group_tasks_by_escalation()` and `should_consolidate()` functions
+3. **Action handlers** (`backend/app/slack_actions.py`)
+   - `register_action_handlers()` registers all button/modal handlers on Bolt app
+   - Handlers update source systems via writers
+   - Handlers update local DB
+   - Handlers notify user via DM
 
-4. **Placeholder buttons** (`backend/app/slack_blocks.py`)
-   - [Defer] [Done] [Snooze] buttons appear in escalation messages
-   - Non-functional (Phase 2 will add interactivity)
-   - `action_buttons_placeholder()` function
+4. **Database changes**
+   - Added `snooze_until` column to Task model
+   - Created Alembic migration 002
 
-5. **Config and model changes**
-   - Added `user_timezone` to config (default: America/Los_Angeles)
-   - Added `escalation_level`, `last_notified_at` columns to Task model
-   - Created Alembic migration
+5. **Tests**
+   - 16 new tests in `test_slack_actions.py`
+   - 8 new tests in `test_writers.py` for new methods
+   - All 206 unit tests passing (excluding pre-existing test_api.py failures)
 
-6. **Tests**
-   - 40 new tests in `test_escalation.py` and `test_briefing.py`
-   - All 183 unit tests passing
+## Files Created
+
+- `backend/app/slack_actions.py` — Interactive component handlers
+- `backend/alembic/versions/002_add_snooze_until.py` — Migration
+- `backend/tests/test_slack_actions.py` — Tests for buttons/modals
+- `docs/plans/2026-01-31-phase2-button-actions-design.md` — Design doc
+
+## Files Modified
+
+- `backend/app/models.py` — Added `snooze_until` column
+- `backend/app/writers/base.py` — Added abstract methods
+- `backend/app/writers/clickup.py` — Implemented `update_due_date`, `reassign`
+- `backend/app/writers/github.py` — Implemented `update_due_date`, `reassign`
+- `backend/app/slack_blocks.py` — Real buttons + modal builders
+- `backend/app/bot.py` — Registers action handlers
+- `backend/tests/test_writers.py` — Added tests for new methods
+- `docs/tasks/QUEUE.md` — Updated task status
 
 ## Next Action
 
-Phase 2: Button Actions (now unblocked)
-- Make [Defer] [Done] [Snooze] buttons functional
-- Add Slack interaction handlers
-- See `docs/plans/2026-01-31-chief-of-staff-phases.md` Phase 2 section
+Phase 3: AI Conversations (now unblocked)
+- AI engine (Azure OpenAI + regex fallback)
+- NL task commands ("defer X to Monday")
+- Entity queries ("what's happening with Kyle?")
+- Basic research
+- See `docs/plans/2026-01-31-chief-of-staff-phases.md` Phase 3 section
 
 ## Blockers
 
@@ -68,26 +81,28 @@ None
 
 ## Context for Next Session
 
-**Phase 1 deliverables:**
-- `backend/app/escalation.py` - Core escalation logic
-- `backend/app/briefing.py` - Morning briefing generator
-- `backend/app/slack_blocks.py` - Added button and formatting functions
-- `backend/app/notifier.py` - Added `send_escalation_notification()`, `send_grouped_escalation()`, `send_enhanced_morning_briefing()`
+**Phase 2 key functions:**
+- `register_action_handlers(bolt_app)` — Call from bot.py to enable buttons
+- `defer_modal()`, `done_modal()`, `snooze_modal()`, `delegate_modal()` — Modal builders
+- `action_buttons(task_id)` — Creates action button block
 
-**Key functions to know:**
-- `calculate_escalation_level(task)` - Returns 0-7 based on days overdue
-- `should_send_individual_notification(task)` - True only for 3+ days overdue
-- `group_tasks_by_escalation(tasks)` - Groups for consolidation
-- `generate_morning_briefing(db)` - Returns structured briefing data
+**Team member mapping (in slack_actions.py):**
+```python
+TEAM_MEMBERS = {
+    "attila": {"clickup_id": "81842673", "github_username": "atiti"},
+    "tamas": {"clickup_id": "2695145", "github_username": None},
+}
+```
 
 **Success criteria met:**
-- ✓ No individual notifications for tasks < 3 days overdue
-- ✓ Morning briefing structure ready (7 AM scheduling is operational)
-- ✓ 3+ tasks grouped into one message
-- ✓ Buttons appear (non-functional placeholders)
+- ✓ Defer updates due date in ClickUp (adds comment in GitHub)
+- ✓ Done collects context via modal, marks complete
+- ✓ Snooze hides task locally (snooze_until column)
+- ✓ Delegate reassigns in ClickUp and GitHub
 
 ## References
 
+- Phase 2 design: `docs/plans/2026-01-31-phase2-button-actions-design.md`
 - Chief of Staff design: `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
 - Phase breakdown: `docs/plans/2026-01-31-chief-of-staff-phases.md`
 - Queue: `docs/tasks/QUEUE.md`

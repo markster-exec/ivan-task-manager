@@ -1,28 +1,23 @@
+---
+id: task-queue
+title: Task Queue
+type: reference
+status: active
+owner: ivan
+created: 2026-01-29
+updated: 2026-01-31
+tags: [tasks, queue]
+---
+
 # Task Queue
 
 > **Read this file at session start.** Single source of truth for pending work.
 
 ## PENDING
 
-### 1. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium)
-
-**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 2 section)
-
-**Goal:** Take action directly from Slack buttons.
-
-**Deliverables:**
-- [ ] Defer button (dropdown: tomorrow, 3 days, 1 week, pick date)
-- [ ] Done button (thread flow: "What happened?" → mark complete)
-- [ ] Snooze button (hide locally)
-- [ ] Delegate button (Attila, Tamas dropdown)
-
----
-
-### 2. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium)
+### 1. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium)
 
 **Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 3 section)
-
-**Blocked by:** Phase 2
 
 **Goal:** Natural language task management.
 
@@ -52,7 +47,37 @@ See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ## DONE
 
-### 1. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High) — Completed 2026-01-31
+### 1. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium) — Completed 2026-01-31
+
+**Spec:** `docs/plans/2026-01-31-phase2-button-actions-design.md`
+
+**Summary:** Implemented interactive Slack buttons that take action directly without switching apps.
+
+**Deliverables completed:**
+- ✓ Defer button → modal with date options, updates source system
+- ✓ Done button → modal with context input, marks complete
+- ✓ Snooze button → hides task locally (snooze_until column)
+- ✓ Delegate button → reassigns to Attila/Tamas in source system
+- ✓ Writer methods: `update_due_date()`, `reassign()`
+- ✓ Alembic migration 002 for snooze_until column
+- ✓ 24 new tests (all passing)
+
+**Files created:**
+- `backend/app/slack_actions.py`
+- `backend/alembic/versions/002_add_snooze_until.py`
+- `backend/tests/test_slack_actions.py`
+- `docs/plans/2026-01-31-phase2-button-actions-design.md`
+
+**Files modified:**
+- `backend/app/models.py` (added snooze_until)
+- `backend/app/writers/base.py`, `clickup.py`, `github.py`
+- `backend/app/slack_blocks.py` (real buttons + modals)
+- `backend/app/bot.py` (registers handlers)
+- `backend/tests/test_writers.py`
+
+---
+
+### 2. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High) — Completed 2026-01-31
 
 **Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 1 section)
 
@@ -83,7 +108,7 @@ See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ---
 
-### 2. [BUILD] Ticket Processor (Priority: High) — Completed 2026-01-30
+### 3. [BUILD] Ticket Processor (Priority: High) — Completed 2026-01-30
 
 **Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
 

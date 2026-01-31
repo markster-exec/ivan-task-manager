@@ -58,6 +58,9 @@ class Task(Base):
     escalation_level = Column(Integer, default=0)  # 0-7 based on days overdue
     last_notified_at = Column(DateTime, nullable=True)
 
+    # Snooze tracking (local only, doesn't affect source system)
+    snooze_until = Column(DateTime, nullable=True)
+
     # Processor action (for processor-generated tasks)
     action = Column(JSON, nullable=True)  # {"type": "github_comment", "issue": 31, ...}
     linked_task_id = Column(String, nullable=True)  # Reference to original task

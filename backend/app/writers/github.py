@@ -1,5 +1,6 @@
 """GitHub writer for updating issues."""
 
+from datetime import date
 from typing import Optional
 
 import httpx
@@ -112,6 +113,41 @@ class GitHubWriter(SourceWriter):
             )
 
         except httpx.HTTPStatusError as e:
+            return WriteResult(
+                success=False, message=f"GitHub error: {e.response.status_code}"
+            )
+        except httpx.RequestError as e:
+            return WriteResult(success=False, message=f"Connection error: {e}")
+
+    async def update_due_date(self, source_id: str, new_date: date) -> WriteResult:
+        """Update due date for GitHub issue.
+
+        GitHub issues don't have native due dates, so we add a comment
+        noting the new due date instead.
+        """
+        return await self.comment(
+            source_id, f"Due date updated to {new_date.isoformat()}"
+        )
+
+    async def reassign(self, source_id: str, assignee_username: str) -> WriteResult:
+        """Reassign issue to another user in GitHub."""
+        try:
+            client = await self._get_client()
+            response = await client.patch(
+                f"{self.API_BASE}/repos/{self.repo}/issues/{source_id}",
+                json={"assignees": [assignee_username]},
+            )
+            response.raise_for_status()
+            return WriteResult(
+                success=True, message=f"Issue reassigned to {assignee_username}"
+            )
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 422:
+                return WriteResult(
+                    success=False,
+                    message=f"Cannot assign to {assignee_username} - not a collaborator",
+                )
             return WriteResult(
                 success=False, message=f"GitHub error: {e.response.status_code}"
             )
