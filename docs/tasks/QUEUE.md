@@ -4,7 +4,71 @@
 
 ## PENDING
 
-(none)
+### 1. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High)
+
+**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 1 section)
+**Full design:** `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
+
+**Goal:** Replace notification spam with consolidated, escalated alerts.
+
+**Deliverables:**
+- [ ] Escalation ladder (day 0/1/2/3+/5+/7+)
+- [ ] Morning briefing (top 3 tasks, summary, calendar) at 7 AM
+- [ ] Consolidation rule (3+ tasks → one grouped message)
+- [ ] Basic buttons (defer, done, snooze) — placeholders, non-functional
+
+**Files to create/modify:**
+- `backend/app/escalation.py`
+- `backend/app/briefing.py`
+- `backend/app/notifier.py`
+- `backend/app/models.py` (add escalation_level, last_notified_at)
+
+**Success criteria:**
+- No individual notifications for tasks < 3 days overdue
+- Morning briefing sends at 7 AM local time
+- 3+ tasks grouped into one message
+
+---
+
+### 2. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium)
+
+**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 2 section)
+
+**Blocked by:** Phase 1
+
+**Goal:** Take action directly from Slack buttons.
+
+**Deliverables:**
+- [ ] Defer button (dropdown: tomorrow, 3 days, 1 week, pick date)
+- [ ] Done button (thread flow: "What happened?" → mark complete)
+- [ ] Snooze button (hide locally)
+- [ ] Delegate button (Attila, Tamas dropdown)
+
+---
+
+### 3. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium)
+
+**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 3 section)
+
+**Blocked by:** Phase 2
+
+**Goal:** Natural language task management.
+
+**Deliverables:**
+- [ ] AI engine (Azure OpenAI + regex fallback)
+- [ ] NL task commands ("defer X to Monday")
+- [ ] Entity queries ("what's happening with Kyle?")
+- [ ] Basic research ("find coworking spaces in LA")
+
+---
+
+### FUTURE (After Phase 1-3 evaluation)
+
+- Phase 4: Context Layer (location, priorities, calendar)
+- Phase 5: Input Processing (links, images, files)
+- Phase 6: Advanced (dependencies, routing, video, bilingual)
+
+See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ---
 
