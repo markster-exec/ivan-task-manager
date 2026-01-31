@@ -20,6 +20,17 @@ from slack_sdk.errors import SlackApiError
 from .config import get_settings
 from .models import Task, NotificationLog, SessionLocal
 from .scorer import get_score_breakdown, get_urgency_label
+from .escalation import (
+    calculate_escalation_level,
+    group_tasks_by_escalation,
+    should_consolidate,
+    get_tasks_needing_notification,
+)
+from .slack_blocks import (
+    format_escalation_message,
+    format_grouped_escalation,
+    format_briefing_with_buttons,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -338,3 +349,206 @@ Reason: {reason}"""
             notification_type=event.trigger.value,
             task_id=task.id,
         )
+
+    async def send_escalation_notification(self, task: Task) -> bool:
+        """Send escalation notification for an overdue task.
+
+        Only sends for tasks 3+ days overdue.
+        Uses Block Kit with action buttons.
+
+        Args:
+            task: The overdue task
+
+        Returns:
+            True if notification was sent
+        """
+        level = calculate_escalation_level(task)
+        if level < 3:
+            logger.debug(f"Task {task.id} not at escalation level, skipping")
+            return False
+
+        due_str = task.due_date.isoformat() if task.due_date else "No date"
+        text, blocks = format_escalation_message(
+            title=task.title,
+            url=task.url,
+            due_date=due_str,
+            escalation_level=level,
+            task_id=task.id,
+        )
+
+        if not self._should_send("escalation", task.id, text):
+            return False
+
+        try:
+            self.client.chat_postMessage(
+                channel=self.ivan_user_id,
+                text=text,
+                blocks=blocks,
+            )
+            self._log_notification("escalation", task.id, text)
+
+            # Update last notified
+            db = SessionLocal()
+            try:
+                db_task = db.query(Task).filter(Task.id == task.id).first()
+                if db_task:
+                    from datetime import datetime
+
+                    db_task.last_notified_at = datetime.utcnow()
+                    db_task.escalation_level = level
+                    db.commit()
+            finally:
+                db.close()
+
+            logger.info(f"Sent escalation notification for {task.id} at level {level}")
+            return True
+        except SlackApiError as e:
+            logger.error(f"Failed to send escalation notification: {e}")
+            return False
+
+    async def send_grouped_escalation(
+        self, tasks: list[Task], escalation_level: int
+    ) -> bool:
+        """Send a grouped notification for multiple tasks at same escalation level.
+
+        Args:
+            tasks: List of tasks to group
+            escalation_level: Shared escalation level
+
+        Returns:
+            True if notification was sent
+        """
+        if len(tasks) < 3:
+            # Not enough to consolidate, send individually
+            for task in tasks:
+                await self.send_escalation_notification(task)
+            return True
+
+        tasks_data = [
+            {
+                "title": t.title,
+                "url": t.url,
+                "due_date": t.due_date.isoformat() if t.due_date else "No date",
+                "task_id": t.id,
+            }
+            for t in tasks
+        ]
+
+        text, blocks = format_grouped_escalation(tasks_data, escalation_level)
+
+        # Use first task ID for deduplication
+        task_ids = ",".join(t.id for t in tasks[:3])
+        if not self._should_send("escalation_group", task_ids, text):
+            return False
+
+        try:
+            self.client.chat_postMessage(
+                channel=self.ivan_user_id,
+                text=text,
+                blocks=blocks,
+            )
+            self._log_notification("escalation_group", task_ids, text)
+            logger.info(
+                f"Sent grouped escalation for {len(tasks)} tasks at level {escalation_level}"
+            )
+            return True
+        except SlackApiError as e:
+            logger.error(f"Failed to send grouped escalation: {e}")
+            return False
+
+    async def send_escalation_notifications(self) -> int:
+        """Process all tasks needing escalation notifications.
+
+        Handles consolidation: 3+ tasks at same level → one grouped message.
+
+        Returns:
+            Number of notifications sent
+        """
+        db = SessionLocal()
+        try:
+            tasks = get_tasks_needing_notification(db)
+            if not tasks:
+                return 0
+
+            grouped = group_tasks_by_escalation(tasks)
+            sent_count = 0
+
+            for level, level_tasks in grouped.items():
+                if should_consolidate(level_tasks):
+                    if await self.send_grouped_escalation(level_tasks, level):
+                        sent_count += 1
+                else:
+                    for task in level_tasks:
+                        if await self.send_escalation_notification(task):
+                            sent_count += 1
+
+            return sent_count
+        finally:
+            db.close()
+
+    async def send_enhanced_morning_briefing(
+        self, location: Optional[str] = None
+    ) -> bool:
+        """Send enhanced morning briefing with Block Kit formatting.
+
+        Args:
+            location: Optional current location string
+
+        Returns:
+            True if sent successfully
+        """
+        from .briefing import generate_morning_briefing
+
+        db = SessionLocal()
+        try:
+            briefing = generate_morning_briefing(db, location=location)
+
+            # Convert to format expected by slack_blocks
+            top_tasks = [
+                {
+                    "title": t.title,
+                    "url": t.url,
+                    "score": t.score,
+                    "flags": t.flags,
+                    "task_id": t.id,
+                }
+                for t in briefing.top_tasks
+            ]
+
+            stats = {
+                "total": briefing.stats.total,
+                "overdue": briefing.stats.overdue,
+                "due_today": briefing.stats.due_today,
+                "blocking_people": briefing.stats.blocking_people,
+            }
+
+            calendar_events = [
+                {"time": e.time, "title": e.title} for e in briefing.calendar_events
+            ]
+
+            text, blocks = format_briefing_with_buttons(
+                greeting=briefing.greeting,
+                location=briefing.location,
+                top_tasks=top_tasks,
+                stats=stats,
+                calendar_events=calendar_events,
+                suggestion=briefing.suggestion,
+            )
+
+            if not self._should_send("morning", None, text):
+                return False
+
+            self.client.chat_postMessage(
+                channel=self.ivan_user_id,
+                text=text,
+                blocks=blocks,
+            )
+            self._log_notification("morning", None, text)
+            logger.info("Sent enhanced morning briefing")
+            return True
+
+        except SlackApiError as e:
+            logger.error(f"Failed to send morning briefing: {e}")
+            return False
+        finally:
+            db.close()

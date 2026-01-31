@@ -4,11 +4,11 @@
 
 ## Last Updated
 
-2026-01-31 16:30 UTC
+2026-01-31 18:00 UTC
 
 ## Current Phase
 
-Chief of Staff Bot Design — **Complete** ✓
+Chief of Staff Bot Phase 1 — **Complete** ✓
 
 ## Active Work
 
@@ -17,33 +17,50 @@ Chief of Staff Bot Design — **Complete** ✓
 | Branch | `main` |
 | PR | None |
 | Issue | None |
-| Status | Design complete, ready for implementation planning |
+| Status | Phase 1 complete, Phase 2 ready |
 
 ## Done This Session
 
-**Brainstorming session with Ivan to redesign the Slack bot into a full chief of staff assistant.**
+**Implemented Phase 1: Smart Notifications**
 
-Key decisions made:
-1. **Three surfaces:** Slack (GPT-5.2), Claude Code (Claude), ivan-os (autonomous)
-2. **AI fallback chain:** Azure (30s) → ivan-os → Anthropic → regex degraded
-3. **Smart escalation:** Day 1-2-3+ ladder, no spam, grouped alerts
-4. **Hybrid interaction:** Buttons + natural language, context collection in threads
-5. **Full assistant:** Research, multi-modal input (links, images, video, files, voice)
-6. **Context awareness:** Location, timezone, priorities, calendar
-7. **Task dependencies:** Detection, tracking, blocker queries
-8. **Delegation routing:** Attila → GitHub, Tamas → ClickUp, based on work type
-9. **Bilingual:** EN/HU with ivan-os Hungarian model routing
-10. **Full audit trail:** Every action logged, debugging commands
+1. **Escalation ladder** (`backend/app/escalation.py`)
+   - Day 0: Morning briefing only
+   - Day 1: Flagged in briefing
+   - Day 2: Afternoon digest
+   - Day 3+: Individual DM with buttons
+   - Day 5+: Escalation prompt ("delegate or kill?")
+   - Day 7+: Final warning
 
-**Design doc created:**
-- `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
+2. **Morning briefing** (`backend/app/briefing.py`)
+   - Top 3 tasks by score
+   - Summary stats (total, overdue, due today, blocking people)
+   - Calendar placeholder (for Phase 4)
+   - Suggestion when 3+ tasks are 3+ days overdue
+
+3. **Consolidation rule**
+   - 3+ tasks at same escalation level → one grouped message
+   - `group_tasks_by_escalation()` and `should_consolidate()` functions
+
+4. **Placeholder buttons** (`backend/app/slack_blocks.py`)
+   - [Defer] [Done] [Snooze] buttons appear in escalation messages
+   - Non-functional (Phase 2 will add interactivity)
+   - `action_buttons_placeholder()` function
+
+5. **Config and model changes**
+   - Added `user_timezone` to config (default: America/Los_Angeles)
+   - Added `escalation_level`, `last_notified_at` columns to Task model
+   - Created Alembic migration
+
+6. **Tests**
+   - 40 new tests in `test_escalation.py` and `test_briefing.py`
+   - All 183 unit tests passing
 
 ## Next Action
 
-Design is complete. Next steps:
-1. Create implementation plan from design doc
-2. Break into phases (likely: AI engine → escalation → buttons → assistant → inputs)
-3. Begin implementation
+Phase 2: Button Actions (now unblocked)
+- Make [Defer] [Done] [Snooze] buttons functional
+- Add Slack interaction handlers
+- See `docs/plans/2026-01-31-chief-of-staff-phases.md` Phase 2 section
 
 ## Blockers
 
@@ -51,46 +68,26 @@ None
 
 ## Context for Next Session
 
-The Chief of Staff Bot design covers a complete redesign of the Slack bot:
+**Phase 1 deliverables:**
+- `backend/app/escalation.py` - Core escalation logic
+- `backend/app/briefing.py` - Morning briefing generator
+- `backend/app/slack_blocks.py` - Added button and formatting functions
+- `backend/app/notifier.py` - Added `send_escalation_notification()`, `send_grouped_escalation()`, `send_enhanced_morning_briefing()`
 
-**Architecture:**
-- Three surfaces sharing state (Slack, Claude Code, ivan-os)
-- Context layer (location, priorities, calendar)
-- AI engine with 30s timeout and fallback chain
+**Key functions to know:**
+- `calculate_escalation_level(task)` - Returns 0-7 based on days overdue
+- `should_send_individual_notification(task)` - True only for 3+ days overdue
+- `group_tasks_by_escalation(tasks)` - Groups for consolidation
+- `generate_morning_briefing(db)` - Returns structured briefing data
 
-**Key Features:**
-- Smart escalation (no notification spam)
-- Morning briefings with inline actions
-- Conversational assistant (research, entity queries)
-- Process any input (links, images, video, files)
-- Task dependencies and delegation routing
-- Bilingual support (EN/HU)
-- Full action logging
-
-**Files to create (from design):**
-- `backend/app/ai_engine.py` - AI provider abstraction
-- `backend/app/context.py` - Context layer
-- `backend/app/escalation.py` - Smart escalation
-- `backend/app/input_processor.py` - Multi-modal input
-- `backend/app/action_logger.py` - Audit trail
-- `backend/app/routing.py` - Delegation routing
-- `backend/app/dependencies.py` - Task dependencies
-
-## Previous Work
-
-### Ticket Processor (Complete)
-
-**Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
-
-All 12 tasks complete. Features:
-- `ivan process` - Analyze GitHub issues, draft responses
-- `ivan next` - Shows drafts in bordered box
-- `ivan done` - Posts comment to GitHub
-- `ivan done -e` - Edit draft before posting
-- `ivan export/import` - Offline workflow
+**Success criteria met:**
+- ✓ No individual notifications for tasks < 3 days overdue
+- ✓ Morning briefing structure ready (7 AM scheduling is operational)
+- ✓ 3+ tasks grouped into one message
+- ✓ Buttons appear (non-functional placeholders)
 
 ## References
 
 - Chief of Staff design: `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
-- Ticket Processor spec: `docs/plans/2026-01-29-ticket-processor-implementation.md`
-- Phase 4 roadmap: `docs/plans/2026-01-28-phase-4-roadmap.md`
+- Phase breakdown: `docs/plans/2026-01-31-chief-of-staff-phases.md`
+- Queue: `docs/tasks/QUEUE.md`

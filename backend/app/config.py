@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     quiet_hours_start: str = "22:00"
     quiet_hours_end: str = "07:00"
     sync_interval_minutes: int = 60
+    user_timezone: str = "America/Los_Angeles"
 
     # App
     log_level: str = "INFO"

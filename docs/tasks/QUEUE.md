@@ -4,37 +4,9 @@
 
 ## PENDING
 
-### 1. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High)
-
-**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 1 section)
-**Full design:** `docs/plans/2026-01-31-chief-of-staff-bot-design.md`
-
-**Goal:** Replace notification spam with consolidated, escalated alerts.
-
-**Deliverables:**
-- [ ] Escalation ladder (day 0/1/2/3+/5+/7+)
-- [ ] Morning briefing (top 3 tasks, summary, calendar) at 7 AM
-- [ ] Consolidation rule (3+ tasks → one grouped message)
-- [ ] Basic buttons (defer, done, snooze) — placeholders, non-functional
-
-**Files to create/modify:**
-- `backend/app/escalation.py`
-- `backend/app/briefing.py`
-- `backend/app/notifier.py`
-- `backend/app/models.py` (add escalation_level, last_notified_at)
-
-**Success criteria:**
-- No individual notifications for tasks < 3 days overdue
-- Morning briefing sends at 7 AM local time
-- 3+ tasks grouped into one message
-
----
-
-### 2. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium)
+### 1. [BUILD] Chief of Staff Bot — Phase 2: Button Actions (Priority: Medium)
 
 **Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 2 section)
-
-**Blocked by:** Phase 1
 
 **Goal:** Take action directly from Slack buttons.
 
@@ -46,7 +18,7 @@
 
 ---
 
-### 3. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium)
+### 2. [BUILD] Chief of Staff Bot — Phase 3: AI Conversations (Priority: Medium)
 
 **Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 3 section)
 
@@ -80,7 +52,38 @@ See `docs/plans/2026-01-31-chief-of-staff-phases.md` for details.
 
 ## DONE
 
-### 1. [BUILD] Ticket Processor (Priority: High) — Completed 2026-01-30
+### 1. [BUILD] Chief of Staff Bot — Phase 1: Smart Notifications (Priority: High) — Completed 2026-01-31
+
+**Spec:** `docs/plans/2026-01-31-chief-of-staff-phases.md` (Phase 1 section)
+
+**Summary:** Implemented smart escalation notifications that replace spam with consolidated, escalated alerts.
+
+**Deliverables completed:**
+- ✓ Escalation ladder (day 0/1/2/3+/5+/7+) in `escalation.py`
+- ✓ Morning briefing generator in `briefing.py` (top 3, stats, calendar placeholder)
+- ✓ Consolidation rule (3+ tasks → one grouped message)
+- ✓ Placeholder buttons [Defer] [Done] [Snooze] in `slack_blocks.py`
+- ✓ `user_timezone` config setting (currently: America/Los_Angeles)
+- ✓ Model columns: `escalation_level`, `last_notified_at`
+- ✓ Alembic migration for new columns
+- ✓ 40 new tests (all passing)
+
+**Files created:**
+- `backend/app/escalation.py`
+- `backend/app/briefing.py`
+- `backend/alembic/versions/001_add_escalation_columns.py`
+- `backend/tests/test_escalation.py`
+- `backend/tests/test_briefing.py`
+
+**Files modified:**
+- `backend/app/config.py` (added user_timezone)
+- `backend/app/models.py` (added escalation columns)
+- `backend/app/slack_blocks.py` (added buttons and escalation formatting)
+- `backend/app/notifier.py` (added escalation notification methods)
+
+---
+
+### 2. [BUILD] Ticket Processor (Priority: High) — Completed 2026-01-30
 
 **Spec:** `docs/plans/2026-01-29-ticket-processor-implementation.md`
 

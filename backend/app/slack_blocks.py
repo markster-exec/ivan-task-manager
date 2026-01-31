@@ -231,3 +231,213 @@ def format_skip(skipped_title: str) -> tuple[str, list[dict]]:
     text = f"⏭️ Skipped: {skipped_title}"
     blocks = [section(f"⏭️ *Skipped:* {skipped_title}")]
     return text, blocks
+
+
+def action_buttons_placeholder(task_id: str) -> dict:
+    """Create placeholder action buttons for escalation messages.
+
+    These buttons are non-functional in Phase 1.
+    Phase 2 will add interactivity.
+
+    Args:
+        task_id: Task ID for button action values
+    """
+    return {
+        "type": "actions",
+        "elements": [
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Defer", "emoji": True},
+                "value": f"defer:{task_id}",
+                "action_id": "defer_placeholder",
+            },
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Done", "emoji": True},
+                "value": f"done:{task_id}",
+                "action_id": "done_placeholder",
+                "style": "primary",
+            },
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Snooze", "emoji": True},
+                "value": f"snooze:{task_id}",
+                "action_id": "snooze_placeholder",
+            },
+        ],
+    }
+
+
+def format_escalation_message(
+    title: str,
+    url: str,
+    due_date: str,
+    escalation_level: int,
+    task_id: str,
+) -> tuple[str, list[dict]]:
+    """Format an escalation notification with action buttons.
+
+    Args:
+        title: Task title
+        url: Task URL
+        due_date: Due date string
+        escalation_level: Level (3, 5, or 7)
+        task_id: Task ID for button actions
+
+    Returns:
+        Tuple of (text fallback, blocks)
+    """
+    # Emoji and message based on level
+    if escalation_level >= 7:
+        emoji = "⚫"
+        level_msg = "7+ days overdue"
+        extra = "\n_Removing from active list unless you respond_"
+    elif escalation_level >= 5:
+        emoji = "🔴"
+        level_msg = "5 days overdue"
+        extra = "\n_Should I delegate or kill it?_"
+    else:
+        emoji = "🟠"
+        level_msg = "3 days overdue"
+        extra = ""
+
+    text = f"{emoji} {level_msg}: {title}"
+
+    blocks = [
+        section(f"{emoji} *{level_msg}*\n<{url}|{title}>\nWas due: {due_date}{extra}"),
+        action_buttons_placeholder(task_id),
+    ]
+
+    return text, blocks
+
+
+def format_grouped_escalation(
+    tasks_data: list[dict],
+    escalation_level: int,
+) -> tuple[str, list[dict]]:
+    """Format a grouped escalation message for 3+ tasks.
+
+    Args:
+        tasks_data: List of dicts with title, url, due_date, task_id
+        escalation_level: Shared escalation level
+
+    Returns:
+        Tuple of (text fallback, blocks)
+    """
+    count = len(tasks_data)
+
+    if escalation_level >= 7:
+        emoji = "⚫"
+        level_msg = "7+ days overdue"
+    elif escalation_level >= 5:
+        emoji = "🔴"
+        level_msg = "5 days overdue"
+    else:
+        emoji = "🟠"
+        level_msg = "3 days overdue"
+
+    text = f"{emoji} {count} tasks are {level_msg}"
+
+    blocks = [
+        section(f"{emoji} *{count} tasks are {level_msg}*"),
+        divider(),
+    ]
+
+    # List each task
+    for i, task in enumerate(tasks_data[:10], 1):
+        blocks.append(
+            section(
+                f"*{i}.* <{task['url']}|{task['title']}>\n"
+                f"      Due: {task['due_date']}"
+            )
+        )
+
+    if count > 10:
+        blocks.append(context(f"_...and {count - 10} more_"))
+
+    # Add suggestion
+    blocks.append(divider())
+    blocks.append(section("_Want me to bulk-defer these to next week?_"))
+
+    return text, blocks
+
+
+def format_briefing_with_buttons(
+    greeting: str,
+    location: Optional[str],
+    top_tasks: list[dict],
+    stats: dict,
+    calendar_events: list[dict],
+    suggestion: Optional[str],
+) -> tuple[str, list[dict]]:
+    """Format morning briefing with enhanced layout.
+
+    Args:
+        greeting: Greeting string (Good morning, etc.)
+        location: Optional location string
+        top_tasks: List of dicts with title, url, score, flags, task_id
+        stats: Dict with total, overdue, due_today, blocking_people
+        calendar_events: List of calendar event dicts
+        suggestion: Optional suggestion text
+
+    Returns:
+        Tuple of (text fallback, blocks)
+    """
+    text = f"☀️ {greeting}! {stats['total']} tasks, {stats['overdue']} overdue"
+
+    # Header
+    location_line = f"\n📍 You're in {location}" if location else ""
+    blocks = [
+        section(f"☀️ *{greeting}, Ivan*{location_line}"),
+        divider(),
+        section("🔥 *TOP 3 FOCUS*"),
+    ]
+
+    # Top tasks with inline buttons
+    for i, task in enumerate(top_tasks[:3], 1):
+        flags_str = " | ".join(task["flags"]) if task.get("flags") else ""
+        blocks.append(
+            section(
+                f"*{i}.* <{task['url']}|{task['title']}> (Score: {task['score']})\n"
+                f"      → {flags_str}"
+            )
+        )
+
+    # Stats
+    blocking_str = (
+        ", ".join(stats["blocking_people"]) if stats["blocking_people"] else "none"
+    )
+    blocks.extend(
+        [
+            divider(),
+            section(
+                f"📊 *SUMMARY*\n"
+                f"• {stats['total']} tasks total, {stats['overdue']} overdue\n"
+                f"• {stats['due_today']} due today\n"
+                f"• {len(stats['blocking_people'])} people waiting on you ({blocking_str})"
+            ),
+        ]
+    )
+
+    # Calendar
+    blocks.append(divider())
+    if calendar_events:
+        cal_lines = []
+        for event in calendar_events[:3]:
+            cal_lines.append(f"• {event['time']} - {event['title']}")
+        blocks.append(section("📅 *TODAY*\n" + "\n".join(cal_lines)))
+    else:
+        blocks.append(section("📅 *TODAY*\n_No events scheduled_"))
+
+    # Suggestion
+    if suggestion:
+        blocks.extend(
+            [
+                divider(),
+                section(f"💡 *SUGGESTION*\n{suggestion}"),
+            ]
+        )
+
+    blocks.append(context("Type `ivan next` to start working."))
+
+    return text, blocks
